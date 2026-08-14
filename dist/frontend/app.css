@@ -1,0 +1,85 @@
+:root {
+	color-scheme: light dark;
+}
+
+body {
+	margin: 0;
+
+	font-family: system-ui, sans-serif;
+	font-size: 14px;
+}
+
+.probe {
+	display: grid;
+	gap: 12px;
+
+	padding: 16px;
+}
+
+.probe-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.probe-heading {
+	margin: 0;
+
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.probe-refresh {
+	padding: 6px 12px;
+
+	border: 1px solid currentColor;
+	border-radius: 6px;
+	background: transparent;
+	color: inherit;
+
+	cursor: pointer;
+}
+
+.probe-status {
+	margin: 0;
+
+	opacity: 0.8;
+}
+
+.probe-status.is-error {
+	opacity: 1;
+
+	color: #d33;
+}
+
+.probe-list {
+	display: grid;
+	gap: 8px;
+
+	margin: 0;
+	padding: 0;
+
+	list-style: none;
+}
+
+.probe-item {
+	display: grid;
+	gap: 2px;
+
+	padding: 8px 10px;
+
+	border: 1px solid rgb(127 127 127 / 0.35);
+	border-radius: 8px;
+}
+
+.probe-name {
+	font-weight: 600;
+}
+
+.probe-path,
+.probe-recorded {
+	opacity: 0.75;
+
+	font-size: 12px;
+}
