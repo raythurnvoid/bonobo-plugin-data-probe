@@ -1,11 +1,14 @@
-// src/backend.ts
-var MAX_REPLY_BYTES = 16 * 1024 * 1024;
-var COLLECTION = "response_probes";
-var encoder = new TextEncoder();
-function is_record(value) {
+import type { BonoboEnv } from "bonobo-plugin-sdk";
+
+const MAX_REPLY_BYTES = 16 * 1024 * 1024;
+const COLLECTION = "response_probes";
+const encoder = new TextEncoder();
+
+function is_record(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function filled_reply(runId, targetBytes, token) {
+
+function filled_reply(runId: string, targetBytes: number, token: string) {
 	const envelopeBytes = encoder.encode(
 		JSON.stringify({ runId, pluginStatus: 200, output: "" }),
 	).byteLength;
@@ -18,10 +21,11 @@ function filled_reply(runId, targetBytes, token) {
 		"a".repeat(available % tokenBytes)
 	);
 }
-function text_stream(text, chunkBytes) {
+
+function text_stream(text: string, chunkBytes: number) {
 	const bytes = encoder.encode(text);
 	let offset = 0;
-	return new ReadableStream({
+	return new ReadableStream<Uint8Array>({
 		pull(controller) {
 			if (offset === bytes.byteLength) {
 				controller.close();
@@ -33,7 +37,8 @@ function text_stream(text, chunkBytes) {
 		},
 	});
 }
-async function write_probe(env, runId, caseName) {
+
+async function write_probe(env: BonoboEnv, runId: string, caseName: string) {
 	const response = await fetch(
 		`${env.BONOBO.host.apiOrigin}/api/v1/plugin-data/write`,
 		{
@@ -46,11 +51,7 @@ async function write_probe(env, runId, caseName) {
 			body: JSON.stringify({
 				collection: COLLECTION,
 				key: `qa-${runId}`,
-				value: {
-					case: caseName,
-					runId,
-					recordedAt: /* @__PURE__ */ new Date().toISOString(),
-				},
+				value: { case: caseName, runId, recordedAt: new Date().toISOString() },
 			}),
 		},
 	);
@@ -60,9 +61,10 @@ async function write_probe(env, runId, caseName) {
 			`Probe document write refused with HTTP ${response.status}`,
 		);
 }
-var backend_default = {
-	async fetch(request, env) {
-		const event = await request.json();
+
+export default {
+	async fetch(request: Request, env: BonoboEnv): Promise<Response> {
+		const event: unknown = await request.json();
 		if (
 			!is_record(event) ||
 			typeof event.pluginRunId !== "string" ||
@@ -119,7 +121,7 @@ var backend_default = {
 			case "escaped-unicode": {
 				const targetBytes =
 					MAX_REPLY_BYTES + (caseName === "one-byte-over" ? 1 : 0);
-				const token = caseName === "escaped-unicode" ? '\n\\"\u{1F98A}' : "a";
+				const token = caseName === "escaped-unicode" ? '\n\\"🦊' : "a";
 				return new Response(
 					text_stream(filled_reply(runId, targetBytes, token), 64 * 1024),
 				);
@@ -130,12 +132,12 @@ var backend_default = {
 				);
 			case "tiny-chunks":
 				return new Response(
-					text_stream(`Tiny chunks: ${'\u{1F98A}\n\\"'.repeat(256)}`, 1),
+					text_stream(`Tiny chunks: ${'🦊\n\\"'.repeat(256)}`, 1),
 				);
 			case "broken-stream": {
 				let sent = false;
 				return new Response(
-					new ReadableStream({
+					new ReadableStream<Uint8Array>({
 						pull(controller) {
 							if (sent) controller.error(new Error("Probe stream failed"));
 							else {
@@ -148,12 +150,12 @@ var backend_default = {
 			}
 			case "stalled-stream":
 				return new Response(
-					new ReadableStream({
+					new ReadableStream<Uint8Array>({
 						start(controller) {
 							controller.enqueue(encoder.encode("waiting"));
 						},
 						pull() {
-							return new Promise(() => {});
+							return new Promise<void>(() => {});
 						},
 					}),
 				);
@@ -174,4 +176,3 @@ var backend_default = {
 		}
 	},
 };
-export { backend_default as default };

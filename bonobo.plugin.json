@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"name": "data-probe",
 	"displayName": "Data Probe",
-	"version": "0.1.0",
-	"description": "Records one plugin-data document per upload and reads them back on its page.",
+	"version": "0.2.0",
+	"description": "Checks backend replies, response limits, no-op uploads, and saved plugin documents after failure. No secrets or outside network calls.",
 	"compatibility": {
 		"bonoboPluginRuntime": "1"
 	},
@@ -11,7 +11,10 @@
 		"entry": "dist/backend/worker.js",
 		"moduleName": "plugin.js",
 		"compatibilityDate": "2026-07-01",
-		"compatibilityFlags": ["nodejs_compat"]
+		"compatibilityFlags": ["nodejs_compat"],
+		"endpoints": [
+			{ "id": "probe", "path": "/probe", "serialization": "installation" }
+		]
 	},
 	"configuration": {
 		"description": "Choose which upload folders the probe records.",
@@ -20,7 +23,7 @@
 	"events": [
 		{
 			"type": "files.upload.completed",
-			"contentTypes": ["text/plain", "text/markdown", "application/json", "image/png", "image/jpeg"],
+			"contentTypes": ["image/png"],
 			"filters": [
 				{
 					"field": "source.path",
@@ -41,37 +44,35 @@
 			}
 		}
 	],
-	"capabilities": ["plugin.data.read", "plugin.data.write"],
+	"capabilities": [
+		"plugin.data.read",
+		"plugin.data.write",
+		"plugin.backend.invoke"
+	],
 	"outboundOrigins": [],
 	"files": [
 		{
 			"path": "dist/backend/worker.js",
-			"sha256": "sha256:f63a4e96da03dab9d7684c59f38f3a8df886c5c329505587e7d36b965a60a077",
-			"bytes": 2377,
+			"sha256": "sha256:3ecae59b6269dcc77bb1543370b24fb02ac94d1136203c9459155507ac120ab8",
+			"bytes": 4789,
 			"contentType": "application/javascript"
 		},
 		{
 			"path": "dist/frontend/index.html",
-			"sha256": "sha256:f450ebb9f05abcbb4a4911d4c620793419089655ef2891534235eab05fda0a70",
-			"bytes": 350,
+			"sha256": "sha256:6fed213372c9e80b94667e10aa605f92e18a986c26203f62de1fdca028b5ee1b",
+			"bytes": 2143,
 			"contentType": "text/html"
 		},
 		{
 			"path": "dist/frontend/app.js",
-			"sha256": "sha256:df329f6fdcdbd6f2d0b6500af1fb4228f5422adb4ee614d1a6f48f364fad287e",
-			"bytes": 3230,
-			"contentType": "application/javascript"
-		},
-		{
-			"path": "dist/frontend/bonobo-sdk.js",
-			"sha256": "sha256:6961cd45f517c0bf92235646193f50d4f528182dfafeff35621e7bfb6ce1cc9a",
-			"bytes": 10213,
+			"sha256": "sha256:23651838fd5f4780a0fecb234b835ce5f23139f66883b155bcd873079b124c09",
+			"bytes": 230018,
 			"contentType": "application/javascript"
 		},
 		{
 			"path": "dist/frontend/app.css",
-			"sha256": "sha256:be693048777f66c3eeb5e4ff227e647909621ead9a67eda36d8d84077c03fa26",
-			"bytes": 930,
+			"sha256": "sha256:621afa5ef2f5d3a19c5c7a59d7b99f87e1e17d0bf2f97df109819037f53b5e22",
+			"bytes": 938,
 			"contentType": "text/css"
 		}
 	]

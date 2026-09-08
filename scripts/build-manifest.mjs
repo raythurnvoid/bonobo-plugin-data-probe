@@ -47,13 +47,22 @@ function replaceJsonValue(text, anchorPattern, key, rawValue, context) {
 		fail(`Cannot find ${context}`);
 	}
 	const objectEnd = text.indexOf("}", anchorMatch.index) + 1;
-	const valuePattern = new RegExp(`("${escapeRegExp(key)}"\\s*:\\s*)("(?:[^"\\\\]|\\\\.)*"|-?\\d+)`);
-	const valueMatch = valuePattern.exec(text.slice(anchorMatch.index, objectEnd));
+	const valuePattern = new RegExp(
+		`("${escapeRegExp(key)}"\\s*:\\s*)("(?:[^"\\\\]|\\\\.)*"|-?\\d+)`,
+	);
+	const valueMatch = valuePattern.exec(
+		text.slice(anchorMatch.index, objectEnd),
+	);
 	if (!valueMatch) {
 		fail(`Cannot find "${key}" in ${context}`);
 	}
-	const valueStart = anchorMatch.index + valueMatch.index + valueMatch[1].length;
-	return text.slice(0, valueStart) + rawValue + text.slice(valueStart + valueMatch[2].length);
+	const valueStart =
+		anchorMatch.index + valueMatch.index + valueMatch[1].length;
+	return (
+		text.slice(0, valueStart) +
+		rawValue +
+		text.slice(valueStart + valueMatch[2].length)
+	);
 }
 
 function writeIfChanged(relativePath, originalText, updatedText) {
@@ -78,6 +87,7 @@ if (!Array.isArray(manifest.files)) {
 
 // Manifest: recompute files[] sha256/bytes from the files on disk.
 let manifestText = originalManifestText;
+let totalBytes = 0;
 for (const file of manifest.files) {
 	let fileBytes;
 	try {
@@ -85,6 +95,11 @@ for (const file of manifest.files) {
 	} catch {
 		fail(`Manifest file is missing on disk: "${file.path}"`);
 	}
+	if (fileBytes.byteLength > 900_000)
+		fail(`Manifest file exceeds 900,000 bytes: "${file.path}"`);
+	totalBytes += fileBytes.byteLength;
+	if (totalBytes > 16 * 1024 * 1024)
+		fail("Manifest files exceed 16 MiB in total");
 	// Publishing rejects unreadably long source lines, so fail the build before this artifact can be released.
 	if (
 		file.contentType.startsWith("text/") ||
@@ -101,10 +116,24 @@ for (const file of manifest.files) {
 		}
 	}
 	const sha256 = `sha256:${createHash("sha256").update(fileBytes).digest("hex")}`;
-	const anchorPattern = new RegExp(`"path"\\s*:\\s*${escapeRegExp(JSON.stringify(file.path))}`);
+	const anchorPattern = new RegExp(
+		`"path"\\s*:\\s*${escapeRegExp(JSON.stringify(file.path))}`,
+	);
 	const context = `the files[] entry for "${file.path}" in "bonobo.plugin.json"`;
-	manifestText = replaceJsonValue(manifestText, anchorPattern, "sha256", JSON.stringify(sha256), context);
-	manifestText = replaceJsonValue(manifestText, anchorPattern, "bytes", String(fileBytes.byteLength), context);
+	manifestText = replaceJsonValue(
+		manifestText,
+		anchorPattern,
+		"sha256",
+		JSON.stringify(sha256),
+		context,
+	);
+	manifestText = replaceJsonValue(
+		manifestText,
+		anchorPattern,
+		"bytes",
+		String(fileBytes.byteLength),
+		context,
+	);
 }
 writeIfChanged("bonobo.plugin.json", originalManifestText, manifestText);
 
@@ -123,8 +152,15 @@ writeIfChanged("package.json", originalPackageJsonText, packageJsonText);
 // app fetches at publish time. May not exist yet on the first run.
 let originalDistManifestText = null;
 try {
-	originalDistManifestText = readFileSync(join(repoRoot, "dist/bonobo.plugin.json"), "utf8");
+	originalDistManifestText = readFileSync(
+		join(repoRoot, "dist/bonobo.plugin.json"),
+		"utf8",
+	);
 } catch {
 	// First run: the dist copy does not exist yet.
 }
-writeIfChanged("dist/bonobo.plugin.json", originalDistManifestText, manifestText);
+writeIfChanged(
+	"dist/bonobo.plugin.json",
+	originalDistManifestText,
+	manifestText,
+);
