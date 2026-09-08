@@ -98,7 +98,10 @@ describe("probe replies", () => {
 			/Probe stream failed/,
 		);
 	});
-	test("leaves a stalled read pending and allows cancellation", async () => {
+	test("keeps a stalled read pending past the invoke deadline and cancels its timer", async (context) => {
+		context.mock.timers.enable({ apis: ["setTimeout"] });
+		const timeout = context.mock.method(globalThis, "setTimeout");
+		const clear = context.mock.method(globalThis, "clearTimeout");
 		const reader = (await invoke("stalled-stream")).body!.getReader();
 		assert.equal(
 			new TextDecoder().decode((await reader.read()).value),
@@ -109,9 +112,27 @@ describe("probe replies", () => {
 			settled = true;
 			return value;
 		});
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		assert.equal(timeout.mock.callCount(), 1);
+		assert.equal(timeout.mock.calls[0]!.arguments[1], 60_000);
+		context.mock.timers.tick(35_001);
+		await Promise.resolve();
 		assert.equal(settled, false);
 		await reader.cancel();
+		assert.equal((await pending).done, true);
+		assert.equal(clear.mock.callCount(), 1);
+		assert.equal(
+			clear.mock.calls[0]!.arguments[0],
+			timeout.mock.calls[0]!.result,
+		);
+	});
+	test("finishes the stalled response when its real delay expires", async (context) => {
+		context.mock.timers.enable({ apis: ["setTimeout"] });
+		const timeout = context.mock.method(globalThis, "setTimeout");
+		const reader = (await invoke("stalled-stream")).body!.getReader();
+		await reader.read();
+		assert.equal(timeout.mock.callCount(), 1);
+		const pending = reader.read();
+		context.mock.timers.tick(60_000);
 		assert.equal((await pending).done, true);
 	});
 	test("refuses unknown cases", async () => {
@@ -172,7 +193,7 @@ describe("saved probe documents", () => {
 					"https://host.example/api/v1/plugin-data/write",
 				);
 				assert.equal(write.authorization, "Bearer test-run-token");
-				assert.equal(write.redirect, "error");
+				assert.equal(write.redirect, "manual");
 				const runId = caseName === "upload-write" ? "upload_run" : "run_123";
 				assert.deepEqual(write.body, {
 					collection: "response_probes",
@@ -185,6 +206,32 @@ describe("saved probe documents", () => {
 					},
 				});
 			}
+		});
+	}
+	for (const status of [301, 302, 303, 307, 308]) {
+		test(`refuses HTTP ${status} without following its location`, async (context) => {
+			const response = new Response("Moved", {
+				status,
+				headers: { Location: "https://outside.example/blocked" },
+			});
+			const fetch = context.mock.method(
+				globalThis,
+				"fetch",
+				async (url: string | URL | Request, init?: RequestInit) => {
+					const request = new Request(url, init);
+					assert.equal(
+						request.url,
+						"https://host.example/api/v1/plugin-data/write",
+					);
+					assert.equal(request.redirect, "manual");
+					return response;
+				},
+			);
+			await assert.rejects(invoke("write-500"), {
+				message: `Probe document write refused with HTTP ${status}`,
+			});
+			assert.equal(fetch.mock.callCount(), 1);
+			assert.equal(response.bodyUsed, true);
 		});
 	}
 });

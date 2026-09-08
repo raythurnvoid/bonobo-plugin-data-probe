@@ -20,6 +20,8 @@ The page runs one selected case through endpoint `probe` (`/probe`). It displays
 
 Large replies are generated at runtime. The exact-size cases include the host-provided `event.pluginRunId`, status, field names, JSON punctuation, and escaping. They do not trust an input run ID. The backend uses the current `env.BONOBO.host.apiOrigin` and `token` binding for host API calls.
 
+Host writes use `redirect: "manual"` and refuse every non-2xx response, including redirects. This keeps the token off redirect destinations and avoids the runner's rejection of `redirect: "error"` seen during 0.2.0 checks. The stalled stream uses a real 60-second timer to keep the read alive past the 35-second invoke deadline. Cancellation clears the timer. An unresolved promise with no future event can fail immediately in Workers, so that 0.2.0 case was not a timeout proof.
+
 PNG uploads whose names start with `noop` return 204 without an API call. Other PNG uploads write one test document and return 204 without creating a file. The normal installation folder filter still applies. Editable text uploads do not trigger this stored-blob event.
 
 Only `response_probes` keys `qa-<runId>` are written. The page can refresh up to 100 of those documents. Existing `uploads` documents are not changed or deleted. Repeating a case starts a new host run and creates a new test record for save cases. Do not use uninstall to clean up a preserved installation: uninstall deletes its plugin store.
@@ -41,4 +43,4 @@ git diff --check
 
 The two builds must have identical file hashes. Direct tests verify status, complete envelope size, byte chunks, stream failures, and host writes. They do not prove deployed runner/Convex capacity or browser accessibility.
 
-This release pins SDK 0.20.0 at reviewed mirror commit `5e7cdcb4c0e2420aebcd93720fd313ba9b90df51`. Version 0.2.0 was confirmed unused in the registry. Review and publish the exact commit through the normal plugin flow, update the intended installation with its existing service account, then verify the served version and artifact bytes. No permission, store, or review bypass is part of this fixture.
+This release pins SDK 0.20.0 at reviewed mirror commit `5e7cdcb4c0e2420aebcd93720fd313ba9b90df51`. Version 0.2.1 was confirmed unused in the registry. Review and publish the exact commit through the normal plugin flow, update the intended installation with its existing service account, then verify the served version and artifact bytes. No permission, store, or review bypass is part of this fixture.

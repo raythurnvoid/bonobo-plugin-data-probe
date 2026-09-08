@@ -2,7 +2,7 @@
 	"schemaVersion": 1,
 	"name": "data-probe",
 	"displayName": "Data Probe",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "Checks backend replies, response limits, no-op uploads, and saved plugin documents after failure. No secrets or outside network calls.",
 	"compatibility": {
 		"bonoboPluginRuntime": "1"
@@ -53,8 +53,8 @@
 	"files": [
 		{
 			"path": "dist/backend/worker.js",
-			"sha256": "sha256:3ecae59b6269dcc77bb1543370b24fb02ac94d1136203c9459155507ac120ab8",
-			"bytes": 4789,
+			"sha256": "sha256:8ce051693cc2d6477a57ab1feba2bcf5d74cd31121237e018462cea4eaffc783",
+			"bytes": 5140,
 			"contentType": "application/javascript"
 		},
 		{

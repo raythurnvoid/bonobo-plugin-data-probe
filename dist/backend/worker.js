@@ -38,7 +38,8 @@ async function write_probe(env, runId, caseName) {
 		`${env.BONOBO.host.apiOrigin}/api/v1/plugin-data/write`,
 		{
 			method: "POST",
-			redirect: "error",
+			// Keep the host token off redirect destinations.
+			redirect: "manual",
 			headers: {
 				Authorization: `Bearer ${env.BONOBO.host.token}`,
 				"Content-Type": "application/json",
@@ -146,17 +147,30 @@ var backend_default = {
 					}),
 				);
 			}
-			case "stalled-stream":
+			case "stalled-stream": {
+				let timer;
+				let finishPull;
 				return new Response(
 					new ReadableStream({
 						start(controller) {
 							controller.enqueue(encoder.encode("waiting"));
 						},
-						pull() {
-							return new Promise(() => {});
+						pull(controller) {
+							return new Promise((resolve) => {
+								finishPull = resolve;
+								timer = setTimeout(() => {
+									controller.close();
+									resolve();
+								}, 6e4);
+							});
+						},
+						cancel() {
+							if (timer !== void 0) clearTimeout(timer);
+							finishPull?.();
 						},
 					}),
 				);
+			}
 			case "write-500":
 			case "write-throw":
 				await write_probe(env, runId, caseName);
