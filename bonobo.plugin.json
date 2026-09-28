@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"name": "data-probe",
 	"displayName": "Data Probe",
-	"version": "0.3.0",
-	"description": "Checks backend replies, response limits, no-op uploads, and saved plugin documents after failure. Also a QA fixture for the chat agent: one MCP server with an echo tool and one skill. No secrets.",
+	"version": "0.4.0",
+	"description": "Checks backend replies, saved plugin documents, scheduled permission limits, and revocation. Also a QA fixture for the chat agent: one MCP server with an echo tool and one skill. No secrets.",
 	"compatibility": {
 		"bonoboPluginRuntime": "1"
 	},
@@ -17,8 +17,8 @@
 		]
 	},
 	"configuration": {
-		"description": "Choose which upload folders the probe records.",
-		"defaultYaml": "triggers:\n  files.upload.completed:\n    folders:\n      - /\n"
+		"description": "Choose upload folders and one scheduled QA check.",
+		"defaultYaml": "triggers:\n  files.upload.completed:\n    folders:\n      - /\nschedule:\n  everyMinutes: 10080\ndiagnostic:\n  case: idle\n"
 	},
 	"events": [
 		{
@@ -31,6 +31,10 @@
 					"configurationPath": ["triggers", "files.upload.completed", "folders"]
 				}
 			]
+		},
+		{
+			"type": "schedule.interval.elapsed",
+			"schedule": { "configurationPath": ["schedule", "everyMinutes"] }
 		}
 	],
 	"pages": [
@@ -47,6 +51,8 @@
 	"capabilities": [
 		"plugin.data.read",
 		"plugin.data.write",
+		"workspace.files.read",
+		"plugin.schedule.run",
 		"plugin.backend.invoke",
 		"agent.mcp.connect",
 		"agent.skills.contribute"
@@ -66,8 +72,8 @@
 	"files": [
 		{
 			"path": "dist/backend/worker.js",
-			"sha256": "sha256:8ce051693cc2d6477a57ab1feba2bcf5d74cd31121237e018462cea4eaffc783",
-			"bytes": 5140,
+			"sha256": "sha256:33311ecb0a0ef125547730fa4ca041eef0cbc30fa911a46bf108c2c186642057",
+			"bytes": 12696,
 			"contentType": "application/javascript"
 		},
 		{
