@@ -26,6 +26,15 @@ PNG uploads whose names start with `noop` return 204 without an API call. Other 
 
 Only `response_probes` keys `qa-<runId>` are written. The page can refresh up to 100 of those documents. Existing `uploads` documents are not changed or deleted. Repeating a case starts a new host run and creates a new test record for save cases. Do not use uninstall to clean up a preserved installation: uninstall deletes its plugin store.
 
+## Chat agent fixture
+
+Since 0.3.0 the plugin is also the Press QA fixture for MCP servers and plugin skills. It needs `agent.mcp.connect` and `agent.skills.contribute`.
+
+- MCP server `fixture` points at the public `modern-basic` test server (`packages/mcp-fixture-worker` in the Press repository). It has the tools `echo` and `picture`, no sign-in, and no secrets.
+- Skill `mcp-echo` (`dist/skills/mcp-echo/SKILL.md`) tells the agent to call `echo` and reply with the echoed text.
+
+The backend and the page did not change. Install 0.3.0 only in a QA workspace: every chat there gets the fixture tools.
+
 ## Build and review
 
 `src/backend.ts` and `src/frontend.ts` are bundled to the listed `dist/` files. The frontend includes the SDK and readable Preact source, matching the first-party plugins. Generated files are committed for normal GitHub publishing. The manifest script checks file sizes and source-line length and updates hashes.

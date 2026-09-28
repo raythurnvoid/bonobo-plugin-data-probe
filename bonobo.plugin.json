@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"name": "data-probe",
 	"displayName": "Data Probe",
-	"version": "0.2.1",
-	"description": "Checks backend replies, response limits, no-op uploads, and saved plugin documents after failure. No secrets or outside network calls.",
+	"version": "0.3.0",
+	"description": "Checks backend replies, response limits, no-op uploads, and saved plugin documents after failure. Also a QA fixture for the chat agent: one MCP server with an echo tool and one skill. No secrets.",
 	"compatibility": {
 		"bonoboPluginRuntime": "1"
 	},
@@ -47,9 +47,22 @@
 	"capabilities": [
 		"plugin.data.read",
 		"plugin.data.write",
-		"plugin.backend.invoke"
+		"plugin.backend.invoke",
+		"agent.mcp.connect",
+		"agent.skills.contribute"
 	],
 	"outboundOrigins": [],
+	"mcpServers": [
+		{
+			"id": "fixture",
+			"title": "MCP fixture",
+			"transport": "http",
+			"url": "https://bonobo-senate-mcp-fixture.ray-thurne-void.workers.dev/modern-basic",
+			"headers": [],
+			"auth": { "kind": "none" },
+			"tools": null
+		}
+	],
 	"files": [
 		{
 			"path": "dist/backend/worker.js",
@@ -74,6 +87,13 @@
 			"sha256": "sha256:621afa5ef2f5d3a19c5c7a59d7b99f87e1e17d0bf2f97df109819037f53b5e22",
 			"bytes": 938,
 			"contentType": "text/css"
+		},
+		{
+			"path": "dist/skills/mcp-echo/SKILL.md",
+			"sha256": "sha256:e52120beaea6aea624a582ca6ea07981b1aca33b114e4bf36775094843219b39",
+			"bytes": 481,
+			"contentType": "text/markdown"
 		}
-	]
+	],
+	"skills": [{ "name": "mcp-echo", "path": "dist/skills/mcp-echo/SKILL.md" }]
 }
