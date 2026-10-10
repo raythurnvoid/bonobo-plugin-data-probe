@@ -243,12 +243,15 @@ async function scheduled_probe(
 				},
 				true,
 			);
+			// Current hosts answer 404 for a folder the user cannot see. Older hosts
+			// answered 200 with an empty final page, so accept both for now.
 			if (
-				hiddenList.status !== 200 ||
-				!is_record(hiddenList.value) ||
-				hiddenList.value.isDone !== true ||
-				!Array.isArray(hiddenList.value.items) ||
-				hiddenList.value.items.length !== 0
+				hiddenList.status !== 404 &&
+				(hiddenList.status !== 200 ||
+					!is_record(hiddenList.value) ||
+					hiddenList.value.isDone !== true ||
+					!Array.isArray(hiddenList.value.items) ||
+					hiddenList.value.items.length !== 0)
 			)
 				throw new Error("Hidden list was not empty");
 		} else {

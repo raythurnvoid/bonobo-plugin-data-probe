@@ -444,6 +444,18 @@ describe("scheduled_probe", () => {
 		]);
 		assert.equal((await scheduled(filesSettings)).status, 409);
 	});
+	test("passes a hidden folder list that answers 404", async (context) => {
+		const calls = host_replies(context, [
+			allowed_list(),
+			allowed_read(),
+			new Response(null, { status: 404 }),
+			new Response(JSON.stringify({ message: "Folder not found: /denied" }), {
+				status: 404,
+			}),
+		]);
+		assert.equal((await scheduled(filesSettings)).status, 200);
+		assert.equal(calls.length, 4);
+	});
 	test("refuses an unfinished hidden folder page", async (context) => {
 		host_replies(context, [
 			allowed_list(),

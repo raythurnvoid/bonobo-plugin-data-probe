@@ -231,11 +231,12 @@ async function scheduled_probe(env, runId, event) {
 				true,
 			);
 			if (
-				hiddenList.status !== 200 ||
-				!is_record(hiddenList.value) ||
-				hiddenList.value.isDone !== true ||
-				!Array.isArray(hiddenList.value.items) ||
-				hiddenList.value.items.length !== 0
+				hiddenList.status !== 404 &&
+				(hiddenList.status !== 200 ||
+					!is_record(hiddenList.value) ||
+					hiddenList.value.isDone !== true ||
+					!Array.isArray(hiddenList.value.items) ||
+					hiddenList.value.items.length !== 0)
 			)
 				throw new Error("Hidden list was not empty");
 		} else {
