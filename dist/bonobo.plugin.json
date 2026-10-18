@@ -2,7 +2,7 @@
 	"schemaVersion": 1,
 	"name": "data-probe",
 	"displayName": "Data Probe",
-	"version": "0.4.1",
+	"version": "0.4.2",
 	"description": "Checks backend replies, saved plugin documents, scheduled permission limits, and revocation. Also a QA fixture for the chat agent: one MCP server with an echo tool and one skill. No secrets.",
 	"compatibility": {
 		"bonoboPluginRuntime": "1"
@@ -72,8 +72,8 @@
 	"files": [
 		{
 			"path": "dist/backend/worker.js",
-			"sha256": "sha256:1d78a2ee9bf0fa4bad86bd476400ffa32511c4312082323393fab3a336cf4903",
-			"bytes": 12735,
+			"sha256": "sha256:566f8b644d1ca140243b57f264afb13fe91dafa4d1bc67e97f13344f849bf03a",
+			"bytes": 12797,
 			"contentType": "application/javascript"
 		},
 		{

@@ -456,6 +456,18 @@ describe("scheduled_probe", () => {
 		assert.equal((await scheduled(filesSettings)).status, 200);
 		assert.equal(calls.length, 4);
 	});
+	test("passes a hidden read and folder list that answer 403", async (context) => {
+		const calls = host_replies(context, [
+			allowed_list(),
+			allowed_read(),
+			new Response(null, { status: 403 }),
+			new Response(JSON.stringify({ message: "Permission denied" }), {
+				status: 403,
+			}),
+		]);
+		assert.equal((await scheduled(filesSettings)).status, 200);
+		assert.equal(calls.length, 4);
+	});
 	test("refuses an unfinished hidden folder page", async (context) => {
 		host_replies(context, [
 			allowed_list(),

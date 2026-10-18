@@ -231,7 +231,10 @@ async function scheduled_probe(
 				path: diagnostic.deniedFile,
 				maxBytes: 4096,
 			});
-			if (denied.status !== 404) throw new Error("Hidden read was not refused");
+			// Current hosts answer 403 for a file the user cannot open. Older hosts
+			// answered 404, so accept both for now.
+			if (denied.status !== 403 && denied.status !== 404)
+				throw new Error("Hidden read was not refused");
 			const hiddenList = await scheduled_post(
 				env,
 				"files/list",
@@ -243,9 +246,10 @@ async function scheduled_probe(
 				},
 				true,
 			);
-			// Current hosts answer 404 for a folder the user cannot see. Older hosts
-			// answered 200 with an empty final page, so accept both for now.
+			// Current hosts answer 403 for a folder the user cannot open. Older hosts
+			// answered 404, or 200 with an empty final page, so accept those for now.
 			if (
+				hiddenList.status !== 403 &&
 				hiddenList.status !== 404 &&
 				(hiddenList.status !== 200 ||
 					!is_record(hiddenList.value) ||

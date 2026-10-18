@@ -218,7 +218,8 @@ async function scheduled_probe(env, runId, event) {
 				path: diagnostic.deniedFile,
 				maxBytes: 4096,
 			});
-			if (denied.status !== 404) throw new Error("Hidden read was not refused");
+			if (denied.status !== 403 && denied.status !== 404)
+				throw new Error("Hidden read was not refused");
 			const hiddenList = await scheduled_post(
 				env,
 				"files/list",
@@ -231,6 +232,7 @@ async function scheduled_probe(env, runId, event) {
 				true,
 			);
 			if (
+				hiddenList.status !== 403 &&
 				hiddenList.status !== 404 &&
 				(hiddenList.status !== 200 ||
 					!is_record(hiddenList.value) ||
