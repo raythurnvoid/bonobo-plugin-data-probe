@@ -28,9 +28,9 @@ Only `response_probes` keys `qa-<runId>` are written. The page can refresh up to
 
 ## Chat agent fixture
 
-Since 0.3.0 the plugin is also the Press QA fixture for MCP servers and plugin skills. It needs `agent.mcp.connect` and `agent.skills.contribute`.
+Since 0.3.0 the plugin is also the Bonobo Senate QA fixture for MCP servers and plugin skills. It needs `agent.mcp.connect` and `agent.skills.contribute`.
 
-- MCP server `fixture` points at the public `modern-basic` test server (`packages/mcp-fixture-worker` in the Press repository). It has the tools `echo` and `picture`, no sign-in, and no secrets.
+- MCP server `fixture` points at the public `modern-basic` test server (`packages/mcp-fixture-worker` in the Bonobo Senate repository). It has the tools `echo` and `picture`, no sign-in, and no secrets.
 - Skill `mcp-echo` (`dist/skills/mcp-echo/SKILL.md`) tells the agent to call `echo` and reply with the echoed text.
 
 The MCP fixture does not change the page or upload cases. Install this plugin only in a QA workspace: every chat there gets the fixture tools.
