@@ -83,11 +83,11 @@ Scheduled requests have a five-second timeout, manual redirects, no retries, and
 From this repository:
 
 ```powershell
-vp env exec pnpm --ignore-workspace install --frozen-lockfile
-vp env exec pnpm --ignore-workspace run typecheck
-vp env exec pnpm --ignore-workspace run test
-vp env exec pnpm --ignore-workspace run build
-vp env exec pnpm --ignore-workspace run build
+vp env exec pnpm install --frozen-lockfile
+vp env exec pnpm run typecheck
+vp env exec pnpm run test
+vp env exec pnpm run build
+vp env exec pnpm run build
 git diff --check
 ```
 
