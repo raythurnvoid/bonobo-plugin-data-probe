@@ -2453,6 +2453,26 @@ var MAX_INT64 = BigInt("9223372036854775807");
 var ZERO = BigInt("0");
 var EIGHT = BigInt("8");
 var TWOFIFTYSIX = BigInt("256");
+var COMMIT_TS_UNRESOLVED =
+	"This commit timestamp is unresolved: its value is assigned when the mutation commits. Read the document after the mutation completes to get its value.";
+var CommitTsPlaceholder = class {
+	[Symbol.toPrimitive](hint) {
+		if (hint === "string") {
+			return this.toString();
+		}
+		throw new Error(COMMIT_TS_UNRESOLVED);
+	}
+	valueOf() {
+		throw new Error(COMMIT_TS_UNRESOLVED);
+	}
+	toJSON() {
+		throw new Error(COMMIT_TS_UNRESOLVED);
+	}
+	toString() {
+		return "[unresolved commit timestamp]";
+	}
+};
+var commitTsPlaceholder = new CommitTsPlaceholder();
 function isSpecial(n) {
 	return Number.isNaN(n) || !Number.isFinite(n) || Object.is(n, -0);
 }
@@ -2584,6 +2604,12 @@ function jsonToConvex(value) {
 			}
 			return float;
 		}
+		if (key === "$commitTs") {
+			if (value.$commitTs !== null) {
+				throw new Error(`Malformed $commitTs field on ${value}`);
+			}
+			return commitTsPlaceholder;
+		}
 		if (key === "$set") {
 			throw new Error(
 				`Received a Set which is no longer supported as a Convex type.`,
@@ -2607,6 +2633,12 @@ function stringifyValueForError(value) {
 	const str = JSON.stringify(value, (_key, value2) => {
 		if (value2 === void 0) {
 			return "undefined";
+		}
+		if (typeof value2 === "function") {
+			return "[Function]";
+		}
+		if (typeof value2 === "symbol") {
+			return String(value2);
 		}
 		if (typeof value2 === "bigint") {
 			return `${value2.toString()}n`;
@@ -2668,6 +2700,9 @@ function convexToJsonInternal(
 	}
 	if (value instanceof ArrayBuffer) {
 		return { $bytes: fromByteArray(new Uint8Array(value)) };
+	}
+	if (value instanceof CommitTsPlaceholder) {
+		return { $commitTs: null };
 	}
 	if (Array.isArray(value)) {
 		return value.map((value2, i2) =>
@@ -2798,12 +2833,16 @@ var VId = class _VId extends BaseValidator {
 	get json() {
 		return { type: "id", tableName: this.tableName };
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this field to be validated as absent. */
+	optional() {
 		return new _VId({
 			isOptional: "optional",
 			tableName: this.tableName,
 		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 };
 var VFloat64 = class _VFloat64 extends BaseValidator {
@@ -2815,11 +2854,15 @@ var VFloat64 = class _VFloat64 extends BaseValidator {
 	get json() {
 		return { type: "number" };
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this field to be validated as absent. */
+	optional() {
 		return new _VFloat64({
 			isOptional: "optional",
 		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 };
 var VInt64 = class _VInt64 extends BaseValidator {
@@ -2831,9 +2874,33 @@ var VInt64 = class _VInt64 extends BaseValidator {
 	get json() {
 		return { type: "bigint" };
 	}
+	/** Allow this validated field to be absent. */
+	optional() {
+		return new _VInt64({ isOptional: "optional" });
+	}
 	/** @internal */
 	asOptional() {
-		return new _VInt64({ isOptional: "optional" });
+		return this.optional();
+	}
+};
+var VCommitTs = class _VCommitTs extends BaseValidator {
+	constructor() {
+		super(...arguments);
+		__publicField(this, "kind", "commitTs");
+	}
+	/** @internal */
+	get json() {
+		return { type: this.kind };
+	}
+	/** Allow this validated field to be absent. */
+	optional() {
+		return new _VCommitTs({
+			isOptional: "optional",
+		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 };
 var VBoolean = class _VBoolean extends BaseValidator {
@@ -2845,11 +2912,15 @@ var VBoolean = class _VBoolean extends BaseValidator {
 	get json() {
 		return { type: this.kind };
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this validated field to be absent. */
+	optional() {
 		return new _VBoolean({
 			isOptional: "optional",
 		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 };
 var VBytes = class _VBytes extends BaseValidator {
@@ -2861,9 +2932,13 @@ var VBytes = class _VBytes extends BaseValidator {
 	get json() {
 		return { type: this.kind };
 	}
+	/** Allow this validated field to be absent. */
+	optional() {
+		return new _VBytes({ isOptional: "optional" });
+	}
 	/** @internal */
 	asOptional() {
-		return new _VBytes({ isOptional: "optional" });
+		return this.optional();
 	}
 };
 var VString = class _VString extends BaseValidator {
@@ -2875,11 +2950,15 @@ var VString = class _VString extends BaseValidator {
 	get json() {
 		return { type: this.kind };
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this validated field to be absent. */
+	optional() {
 		return new _VString({
 			isOptional: "optional",
 		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 };
 var VNull = class _VNull extends BaseValidator {
@@ -2891,9 +2970,13 @@ var VNull = class _VNull extends BaseValidator {
 	get json() {
 		return { type: this.kind };
 	}
+	/** Allow this validated field to be absent. */
+	optional() {
+		return new _VNull({ isOptional: "optional" });
+	}
 	/** @internal */
 	asOptional() {
-		return new _VNull({ isOptional: "optional" });
+		return this.optional();
 	}
 };
 var VAny = class _VAny extends BaseValidator {
@@ -2907,11 +2990,15 @@ var VAny = class _VAny extends BaseValidator {
 			type: this.kind,
 		};
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this validated field to be absent. */
+	optional() {
 		return new _VAny({
 			isOptional: "optional",
 		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 };
 var VObject = class _VObject extends BaseValidator {
@@ -2947,12 +3034,16 @@ var VObject = class _VObject extends BaseValidator {
 			),
 		};
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this validated field to be absent. */
+	optional() {
 		return new _VObject({
 			isOptional: "optional",
 			fields: this.fields,
 		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 	/**
 	 * Create a new VObject with the specified fields omitted.
@@ -3031,12 +3122,16 @@ var VLiteral = class _VLiteral extends BaseValidator {
 			value: convexToJson(this.value),
 		};
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this validated field to be absent. */
+	optional() {
 		return new _VLiteral({
 			isOptional: "optional",
 			value: this.value,
 		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 };
 var VArray = class _VArray extends BaseValidator {
@@ -3059,12 +3154,16 @@ var VArray = class _VArray extends BaseValidator {
 			value: this.element.json,
 		};
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this validated field to be absent. */
+	optional() {
 		return new _VArray({
 			isOptional: "optional",
 			element: this.element,
 		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 };
 var VRecord = class _VRecord extends BaseValidator {
@@ -3089,7 +3188,7 @@ var VRecord = class _VRecord extends BaseValidator {
 			throw new Error("Record validator cannot have optional values");
 		}
 		if (!key.isConvexValidator || !value.isConvexValidator) {
-			throw new Error("Key and value of v.record() but be validators");
+			throw new Error("Key and value of v.record() must be validators");
 		}
 		this.key = key;
 		this.value = value;
@@ -3106,13 +3205,17 @@ var VRecord = class _VRecord extends BaseValidator {
 			},
 		};
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this validated field to be absent. */
+	optional() {
 		return new _VRecord({
 			isOptional: "optional",
 			key: this.key,
 			value: this.value,
 		});
+	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
 	}
 };
 var VUnion = class _VUnion extends BaseValidator {
@@ -3140,18 +3243,22 @@ var VUnion = class _VUnion extends BaseValidator {
 			value: this.members.map((v2) => v2.json),
 		};
 	}
-	/** @internal */
-	asOptional() {
+	/** Allow this validated field to be absent. */
+	optional() {
 		return new _VUnion({
 			isOptional: "optional",
 			members: this.members,
 		});
 	}
+	/** @internal */
+	asOptional() {
+		return this.optional();
+	}
 };
 
 // node_modules/convex/dist/esm/values/validator.js
 function isValidator(v2) {
-	return !!v2.isConvexValidator;
+	return v2?.isConvexValidator === true;
 }
 var v = {
 	/**
@@ -3221,6 +3328,17 @@ var v = {
 	 */
 	int64: () => {
 		return new VInt64({ isOptional: "required" });
+	},
+	/**
+	 * Validates that the value is a commit timestamp: an int64 (`bigint`)
+	 * assigned from the transaction's commit timestamp.
+	 *
+	 * An index on a field with this validator orders documents by commit order.
+	 * Accepts any int64 value; write `db.vars.commitTs` to have the field
+	 * resolve to the commit timestamp when the mutation commits.
+	 */
+	commitTs: () => {
+		return new VCommitTs({ isOptional: "required" });
 	},
 	/**
 	 * Validates that the value is a `boolean`.
@@ -3445,7 +3563,7 @@ var aBytes = arr();
 var bBytes = arr();
 
 // node_modules/convex/dist/esm/index.js
-var version2 = "1.42.2";
+var version2 = "1.47.0";
 
 // node_modules/convex/dist/esm/browser/logging.js
 var __defProp4 = Object.defineProperty;
@@ -6822,8 +6940,11 @@ var PaginatedQueryClient = class {
 				if (ongoingSplits.has(pageKey)) {
 					continue;
 				}
-				const pageToken = pageKeyToQuery.get(pageKey).queryToken;
-				const pageResult = getResult(pageToken);
+				const pageEntry = pageKeyToQuery.get(pageKey);
+				if (!pageEntry) {
+					throw new Error(`No page query for active pageKey ${pageKey}`);
+				}
+				const pageResult = getResult(pageEntry.queryToken);
 				if (!pageResult) {
 					continue;
 				}
@@ -6837,6 +6958,7 @@ var PaginatedQueryClient = class {
 					this.splitPaginatedQueryPage(
 						paginatedQuery,
 						pageKey,
+						pageEntry.cursor,
 						result2.splitCursor,
 						// we just checked
 						result2.continueCursor,
@@ -6848,13 +6970,13 @@ var PaginatedQueryClient = class {
 	splitPaginatedQueryPage(
 		paginatedQuery,
 		pageKey,
+		startCursor,
 		splitCursor,
 		continueCursor,
 	) {
 		const splitKey1 = paginatedQuery.nextPageKey++;
 		const splitKey2 = paginatedQuery.nextPageKey++;
 		const paginationOpts = {
-			cursor: continueCursor,
 			numItems: paginatedQuery.options.initialNumItems,
 			id: paginatedQuery.id,
 		};
@@ -6864,13 +6986,15 @@ var PaginatedQueryClient = class {
 				...paginatedQuery.args,
 				paginationOpts: {
 					...paginationOpts,
-					cursor: null,
-					// Start from beginning for first split
+					cursor: startCursor,
 					endCursor: splitCursor,
 				},
 			},
 		);
-		paginatedQuery.pageKeyToQuery.set(splitKey1, firstSubscription);
+		paginatedQuery.pageKeyToQuery.set(splitKey1, {
+			...firstSubscription,
+			cursor: startCursor,
+		});
 		const secondSubscription = this.client.subscribe(
 			paginatedQuery.canonicalizedUdfPath,
 			{
@@ -6882,7 +7006,10 @@ var PaginatedQueryClient = class {
 				},
 			},
 		);
-		paginatedQuery.pageKeyToQuery.set(splitKey2, secondSubscription);
+		paginatedQuery.pageKeyToQuery.set(splitKey2, {
+			...secondSubscription,
+			cursor: splitCursor,
+		});
 		paginatedQuery.ongoingSplits.set(pageKey, [splitKey1, splitKey2]);
 	}
 	/**
@@ -6905,7 +7032,10 @@ var PaginatedQueryClient = class {
 			pageArgs,
 		);
 		paginatedQuery.pageKeys.push(pageKey);
-		paginatedQuery.pageKeyToQuery.set(pageKey, subscription);
+		paginatedQuery.pageKeyToQuery.set(pageKey, {
+			...subscription,
+			cursor: continueCursor,
+		});
 		return subscription;
 	}
 	removePaginatedQuerySubscriber(token) {
@@ -7389,11 +7519,13 @@ var REQUEST_ID = /* @__PURE__ */ Symbol("var.requestId");
 var IP = /* @__PURE__ */ Symbol("var.ip");
 var USER_AGENT = /* @__PURE__ */ Symbol("var.userAgent");
 var NOW = /* @__PURE__ */ Symbol("var.now");
+var CONVEX_ACTOR = /* @__PURE__ */ Symbol("var.convexActor");
 var varNames = {
 	[REQUEST_ID]: "requestId",
 	[IP]: "ip",
 	[USER_AGENT]: "userAgent",
 	[NOW]: "now",
+	[CONVEX_ACTOR]: "convexActor",
 };
 
 // node_modules/convex/dist/esm/server/schema.js
@@ -7421,6 +7553,7 @@ var TableDefinition = class {
 		__publicField14(this, "vectorIndexes");
 		__publicField14(this, "stagedVectorIndexes");
 		__publicField14(this, "validator");
+		__publicField14(this, "stagedValidator");
 		this.indexes = [];
 		this.stagedDbIndexes = [];
 		this.searchIndexes = [];
@@ -7494,6 +7627,61 @@ var TableDefinition = class {
 		return this;
 	}
 	/**
+	 * Stage changes to this table's document validator.
+	 *
+	 * Convex validates the staged validator against the table's existing
+	 * documents in the background, while the validator passed to
+	 * {@link defineTable} remains the one enforced on writes. Once
+	 * the background validation succeeds, apply the staged changes
+	 * and remove `.staged()`.
+	 *
+	 * For an object validator, pass only the fields to add or replace. Fields
+	 * omitted from the changes keep their enforced validators.
+	 * Set a field to `undefined` to remove it from the staged validator.
+	 * For nested objects, you must specify the full object validator.
+	 *
+	 * ```ts
+	 * defineTable({
+	 *   apple: v.string(),
+	 *   banana: v.number(),
+	 *   legacy: v.optional(v.string()),
+	 * }).staged({
+	 *   banana: v.union(v.string(), v.number()),
+	 *   legacy: undefined,
+	 * })
+	 * ```
+	 *
+	 * See [Staged validators](https://docs.convex.dev/database/schemas#staged-validators).
+	 *
+	 * @param documentSchema - Field changes for a table defined as an object or
+	 * `v.any()`, or a full schema validator specifying the proposed next document
+	 * type. Use a full schema validator for a table defined as a union.
+	 * @returns A {@link TableDefinition} with the staged validator attached.
+	 */
+	staged(documentSchema) {
+		if (this.stagedValidator !== void 0) {
+			throw new Error("Table cannot have more than one staged validator.");
+		}
+		if (isValidator(documentSchema)) {
+			this.stagedValidator = documentSchema;
+		} else {
+			if (this.validator.kind !== "object" && this.validator.kind !== "any") {
+				throw new Error(
+					"Specifying top-level field changes is only supported for simple table definitions. For a table defined with a union or record validator, you must stage a fully defined object or union validator.",
+				);
+			}
+			const enforcedFields =
+				this.validator.kind === "object" ? this.validator.fields : {};
+			const fields = Object.fromEntries(
+				Object.entries({ ...enforcedFields, ...documentSchema }).filter(
+					(entry) => entry[1] !== void 0,
+				),
+			);
+			this.stagedValidator = v.object(fields);
+		}
+		return this.self();
+	}
+	/**
 	 * Work around for https://github.com/microsoft/TypeScript/issues/57035
 	 */
 	self() {
@@ -7512,6 +7700,15 @@ var TableDefinition = class {
 				"Invalid validator: please make sure that the parameter of `defineTable` is valid (see https://docs.convex.dev/database/schemas)",
 			);
 		}
+		let stagedDocumentType = void 0;
+		if (this.stagedValidator !== void 0) {
+			stagedDocumentType = this.stagedValidator.json;
+			if (typeof stagedDocumentType !== "object") {
+				throw new Error(
+					"Invalid staged validator: please make sure that the parameter of `.staged()` is valid (see https://docs.convex.dev/database/schemas)",
+				);
+			}
+		}
 		return {
 			indexes: this.indexes,
 			stagedDbIndexes: this.stagedDbIndexes,
@@ -7520,6 +7717,7 @@ var TableDefinition = class {
 			vectorIndexes: this.vectorIndexes,
 			stagedVectorIndexes: this.stagedVectorIndexes,
 			documentType,
+			stagedDocumentType,
 		};
 	}
 };
@@ -7529,6 +7727,42 @@ function defineTable(documentSchema) {
 	} else {
 		return new TableDefinition(v.object(documentSchema));
 	}
+}
+function addSystemFields(tableName, validator) {
+	switch (validator.kind) {
+		case "object":
+			return validator.extend({
+				_id: v.id(tableName),
+				_creationTime: v.number(),
+			});
+		case "union":
+			return v.union(
+				...validator.members.map((member) =>
+					addSystemFields(tableName, member),
+				),
+			);
+		// `v.any()` already permits the system fields.
+		case "any":
+			return validator;
+		default:
+			throw new Error(
+				`Invalid validator for table "${tableName}": a table's documents must be objects, or a union of objects (see https://docs.convex.dev/database/schemas)`,
+			);
+	}
+}
+function docValidator(tableName, table) {
+	return addSystemFields(tableName, table.validator);
+}
+function tableInSchema(schema, tableName) {
+	const table = schema.tables[tableName];
+	if (table === void 0) {
+		throw new Error(
+			`Table "${tableName}" is not in this schema. Tables in this schema: ${Object.keys(
+				schema.tables,
+			).join(", ")}`,
+		);
+	}
+	return table;
 }
 var SchemaDefinition = class {
 	/**
@@ -7541,6 +7775,37 @@ var SchemaDefinition = class {
 		this.tables = tables;
 		this.schemaValidation =
 			options3?.schemaValidation === void 0 ? true : options3.schemaValidation;
+	}
+	/**
+	 * The validator for whole documents of a table in this schema: the table's
+	 * own validator with the `_id` and `_creationTime` system fields added.
+	 *
+	 * @example
+	 * ```ts
+	 * export const get = query({
+	 *   args: { id: schema.id("messages") },
+	 *   returns: v.union(schema.doc("messages"), v.null()),
+	 *   handler: (ctx, args) => ctx.db.get(args.id),
+	 * });
+	 * ```
+	 *
+	 * @param tableName - The name of a table in this schema.
+	 * @returns A validator matching documents of that table.
+	 */
+	doc(tableName) {
+		return docValidator(tableName, tableInSchema(this, tableName));
+	}
+	/**
+	 * The validator for IDs of a table in this schema.
+	 *
+	 * Same as `v.id(tableName)`, but only accepts tables in this schema.
+	 *
+	 * @param tableName - The name of a table in this schema.
+	 * @returns A validator matching IDs of that table.
+	 */
+	id(tableName) {
+		tableInSchema(this, tableName);
+		return v.id(tableName);
 	}
 	/**
 	 * Export the contents of this definition.
@@ -7559,6 +7824,7 @@ var SchemaDefinition = class {
 					vectorIndexes,
 					stagedVectorIndexes,
 					documentType,
+					stagedDocumentType,
 				} = definition.export();
 				return {
 					tableName,
@@ -7569,6 +7835,7 @@ var SchemaDefinition = class {
 					vectorIndexes,
 					stagedVectorIndexes,
 					documentType,
+					stagedDocumentType,
 				};
 			}),
 			schemaValidation: this.schemaValidation,

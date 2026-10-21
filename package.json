@@ -11,7 +11,7 @@
 	},
 	"dependencies": {
 		"bonobo-plugin-sdk": "github:raythurnvoid/bonobo-plugin-sdk#5e7cdcb4c0e2420aebcd93720fd313ba9b90df51",
-		"convex": "1.42.2",
+		"convex": "1.47.0",
 		"preact": "10.24.3",
 		"react": "19.2.4"
 	},

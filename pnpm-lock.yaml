@@ -10,10 +10,10 @@ importers:
     dependencies:
       bonobo-plugin-sdk:
         specifier: github:raythurnvoid/bonobo-plugin-sdk#5e7cdcb4c0e2420aebcd93720fd313ba9b90df51
-        version: https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/5e7cdcb4c0e2420aebcd93720fd313ba9b90df51(convex@1.42.2(react@19.2.4))(react@19.2.4)
+        version: https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/5e7cdcb4c0e2420aebcd93720fd313ba9b90df51(convex@1.47.0(react@19.2.4))(react@19.2.4)
       convex:
-        specifier: 1.42.2
-        version: 1.42.2(react@19.2.4)
+        specifier: 1.47.0
+        version: 1.47.0(react@19.2.4)
       preact:
         specifier: 10.24.3
         version: 10.24.3
@@ -361,9 +361,9 @@ packages:
       convex: ^1.42.2
       react: ^19.0.0
 
-  convex@1.42.2:
-    resolution: {integrity: sha512-5Mo9EZQ45bG2nbhO7NhTTw5GF9g4RA/kgRQviUQrOI+wFCyfdeNw3PjgOZc2eOM4ruum+0QmUcvVCX5mT2v4rg==}
-    engines: {node: '>=18.0.0', npm: '>=7.0.0'}
+  convex@1.47.0:
+    resolution: {integrity: sha512-B1z/lOmex7i09NASq8+2WG9rZLzGXXOSkpwGOpaNIvOs4awyW4RMgpVBjt8r2wvvHwhEBEsOr2pGYpulnmAxYQ==}
+    engines: {node: '>=20.0.0', npm: '>=7.0.0'}
     hasBin: true
     peerDependencies:
       '@auth0/auth0-react': ^2.0.1
@@ -586,13 +586,13 @@ snapshots:
     dependencies:
       undici-types: 7.16.0
 
-  bonobo-plugin-sdk@https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/5e7cdcb4c0e2420aebcd93720fd313ba9b90df51(convex@1.42.2(react@19.2.4))(react@19.2.4):
+  bonobo-plugin-sdk@https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/5e7cdcb4c0e2420aebcd93720fd313ba9b90df51(convex@1.47.0(react@19.2.4))(react@19.2.4):
     dependencies:
       '@cloudflare/workers-types': 4.20260702.1
-      convex: 1.42.2(react@19.2.4)
+      convex: 1.47.0(react@19.2.4)
       react: 19.2.4
 
-  convex@1.42.2(react@19.2.4):
+  convex@1.47.0(react@19.2.4):
     dependencies:
       esbuild: 0.27.0
       prettier: 3.5.3

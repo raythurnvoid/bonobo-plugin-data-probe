@@ -84,8 +84,8 @@
 		},
 		{
 			"path": "dist/frontend/app.js",
-			"sha256": "sha256:23651838fd5f4780a0fecb234b835ce5f23139f66883b155bcd873079b124c09",
-			"bytes": 230018,
+			"sha256": "sha256:2970b2a771d18b393c8d95f0ebcbd128870f570fbcf846033bb02e46fafe83e0",
+			"bytes": 237796,
 			"contentType": "application/javascript"
 		},
 		{
