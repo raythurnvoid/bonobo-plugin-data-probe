@@ -62,7 +62,7 @@ async function write_probe(env, runId, caseName) {
 			`Probe document write refused with HTTP ${response.status}`,
 		);
 }
-async function scheduled_post(env, path, body, readJson = false) {
+async function scheduled_post(env, path, body, readBody = false) {
 	const response = await fetch(`${env.BONOBO.host.apiOrigin}/api/v1/${path}`, {
 		method: "POST",
 		redirect: "manual",
@@ -74,11 +74,15 @@ async function scheduled_post(env, path, body, readJson = false) {
 		body: JSON.stringify(body),
 	});
 	let value = null;
-	if (response.status !== 200 || !readJson) {
+	if (response.status !== 200 || !readBody) {
 		await response.body?.cancel();
 		return { status: response.status, value };
 	}
 	if (!response.body) throw new Error("Missing host reply");
+	if (readBody === "text" && response.headers.has("X-File-Next-Cursor")) {
+		await response.body.cancel();
+		throw new Error("Expected a small complete QA file");
+	}
 	const reader = response.body.getReader();
 	const decoder = new TextDecoder();
 	let bytes = 0;
@@ -91,7 +95,8 @@ async function scheduled_post(env, path, body, readJson = false) {
 			if (bytes > MAX_HOST_REPLY_BYTES) throw new Error("Host reply too large");
 			text += decoder.decode(next.value, { stream: true });
 		}
-		value = JSON.parse(text + decoder.decode());
+		text += decoder.decode();
+		value = readBody === "text" ? text : JSON.parse(text);
 	} finally {
 		await reader.cancel();
 	}
@@ -192,23 +197,18 @@ async function scheduled_probe(env, runId, event) {
 			const read = await scheduled_post(
 				env,
 				"files/read",
-				{ path: allowedFile, maxBytes: 4096 },
-				true,
+				{ path: allowedFile },
+				"text",
 			);
 			if (
 				read.status !== 200 ||
-				!is_record(read.value) ||
-				read.value.path !== allowedFile ||
-				typeof read.value.content !== "string" ||
-				encoder.encode(read.value.content).byteLength > 4096
+				typeof read.value !== "string" ||
+				encoder.encode(read.value).byteLength > 4096
 			)
 				throw new Error("Allowed read failed");
 			const hash = Array.from(
 				new Uint8Array(
-					await crypto.subtle.digest(
-						"SHA-256",
-						encoder.encode(read.value.content),
-					),
+					await crypto.subtle.digest("SHA-256", encoder.encode(read.value)),
 				),
 				(byte) => byte.toString(16).padStart(2, "0"),
 			).join("");
@@ -216,7 +216,6 @@ async function scheduled_probe(env, runId, event) {
 				throw new Error("Allowed content changed");
 			const denied = await scheduled_post(env, "files/read", {
 				path: diagnostic.deniedFile,
-				maxBytes: 4096,
 			});
 			if (denied.status !== 403 && denied.status !== 404)
 				throw new Error("Hidden read was not refused");
@@ -286,7 +285,6 @@ async function scheduled_probe(env, runId, event) {
 				if (write.status !== 403) throw new Error("KV write was not refused");
 				const denied = await scheduled_post(env, "files/read", {
 					path: diagnostic.deniedFile,
-					maxBytes: 4096,
 				});
 				if (denied.status !== 403)
 					throw new Error("Files scope was not refused");

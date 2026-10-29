@@ -87,7 +87,7 @@ function allowed_list() {
 }
 
 function allowed_read() {
-	return Response.json({ path: "/allowed/note.txt", content: "hello" });
+	return new Response("hello", { headers: { "Content-Type": "application/octet-stream" } });
 }
 
 function host_replies(context: TestContext, replies: Response[]) {
@@ -287,7 +287,7 @@ describe("scheduled_probe", () => {
 		);
 		assert.deepEqual(calls[2], {
 			path: "/api/v1/files/read",
-			body: { path: "/denied/note.txt", maxBytes: 4096 },
+			body: { path: "/denied/note.txt" },
 		});
 		assert.ok(refused.every((reply) => reply.bodyUsed));
 	});
@@ -373,11 +373,11 @@ describe("scheduled_probe", () => {
 			},
 			{
 				path: "/api/v1/files/read",
-				body: { path: "/allowed/note.txt", maxBytes: 4096 },
+				body: { path: "/allowed/note.txt" },
 			},
 			{
 				path: "/api/v1/files/read",
-				body: { path: "/denied/note.txt", maxBytes: 4096 },
+				body: { path: "/denied/note.txt" },
 			},
 			{
 				path: "/api/v1/files/list",
@@ -411,15 +411,14 @@ describe("scheduled_probe", () => {
 		});
 	}
 	for (const read of [
-		{ path: "/outside/note.txt", content: "hello" },
-		{ path: "/allowed/note.txt", content: 3 },
-		{ path: "/allowed/note.txt", content: "changed" },
-		{ path: "/allowed/note.txt", content: "x".repeat(4097) },
+		{ name: "changed", content: "changed" },
+		{ name: "too large", content: "x".repeat(4097) },
+		{ name: "partial", content: "hello", cursor: "next-page" },
 	]) {
-		test(`refuses changed or malformed allowed file (${typeof read.content})`, async (context) => {
+		test(`refuses a ${read.name} allowed file`, async (context) => {
 			const calls = host_replies(context, [
 				allowed_list(),
-				Response.json(read),
+				new Response(read.content, { headers: read.cursor ? { "X-File-Next-Cursor": read.cursor } : {} }),
 			]);
 			assert.equal((await scheduled(filesSettings)).status, 409);
 			assert.equal(calls.length, 2);
