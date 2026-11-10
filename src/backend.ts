@@ -1,4 +1,5 @@
 import type { BonoboEnv } from "bonobo-plugin-sdk";
+import { job_summary, restore_summary } from "./restore-summary.ts";
 
 const MAX_REPLY_BYTES = 16 * 1024 * 1024;
 const MAX_HOST_REPLY_BYTES = 64 * 1024;
@@ -64,11 +65,12 @@ async function write_probe(env: BonoboEnv, runId: string, caseName: string) {
 		);
 }
 
-async function scheduled_post(
+async function host_post(
 	env: BonoboEnv,
 	path: string,
 	body: Record<string, unknown>,
-	readBody: boolean | "text" = false,
+	// "reply" reads the text of every status, so Restore cases can show the host's refusal.
+	readBody: boolean | "text" | "reply" = false,
 ) {
 	const response = await fetch(`${env.BONOBO.host.apiOrigin}/api/v1/${path}`, {
 		method: "POST",
@@ -81,7 +83,7 @@ async function scheduled_post(
 		body: JSON.stringify(body),
 	});
 	let value: unknown = null;
-	if (response.status !== 200 || !readBody) {
+	if (!readBody || (response.status !== 200 && readBody !== "reply")) {
 		await response.body?.cancel();
 		return { status: response.status, value };
 	}
@@ -103,7 +105,7 @@ async function scheduled_post(
 			text += decoder.decode(next.value, { stream: true });
 		}
 		text += decoder.decode();
-		value = readBody === "text" ? text : JSON.parse(text);
+		value = readBody === true ? JSON.parse(text) : text;
 	} finally {
 		await reader.cancel();
 	}
@@ -123,6 +125,91 @@ function saved_path(value: unknown): value is string {
 			.split("/")
 			.every((part) => part !== "" && part !== "." && part !== "..")
 	);
+}
+
+function short_id(value: unknown) {
+	return typeof value === "string" && /^[-_a-zA-Z0-9]{1,128}$/u.test(value);
+}
+
+/**
+ * Check a Restore input strictly and return the host body, or null. Any other key fails, so the
+ * page can never send the host something this probe did not check.
+ */
+function restore_body(input: Record<string, unknown>, extraKeys: string[]) {
+	const keys = [
+		"case",
+		"paths",
+		"nodes",
+		"requestId",
+		"onConflict",
+		"force",
+		"dryRun",
+		...extraKeys,
+	];
+	if (!Object.keys(input).every((key) => keys.includes(key))) return null;
+	const { paths, nodes, requestId, onConflict, force, dryRun } = input;
+	const items = paths ?? nodes;
+	if (
+		(paths === undefined) === (nodes === undefined) ||
+		!Array.isArray(items) ||
+		items.length < 1 ||
+		items.length > 100 ||
+		(paths !== undefined && !items.every(saved_path)) ||
+		(nodes !== undefined &&
+			!items.every(
+				(node: unknown) =>
+					is_record(node) &&
+					Object.keys(node).length === 2 &&
+					short_id(node.nodeId) &&
+					short_id(node.archiveOperationId),
+			)) ||
+		(onConflict !== undefined &&
+			onConflict !== "keep_both" &&
+			onConflict !== "skip") ||
+		(force !== undefined && typeof force !== "boolean") ||
+		(dryRun !== undefined && typeof dryRun !== "boolean")
+	)
+		return null;
+	// The host needs a request ID for a real restore and refuses one on a dry run.
+	if (
+		dryRun === true
+			? requestId !== undefined
+			: typeof requestId !== "string" ||
+				requestId.length < 1 ||
+				requestId.length > 64
+	)
+		return null;
+	return { paths, nodes, requestId, onConflict, force, dryRun };
+}
+
+/**
+ * Send one Restore or job request with this run's token and answer with a small summary only.
+ * Never retry it: the host may already have started the jobs.
+ */
+async function restore_reply(
+	env: BonoboEnv,
+	path: string,
+	body: Record<string, unknown>,
+	summary: (hostStatus: number, value: unknown) => unknown,
+) {
+	try {
+		const reply = await host_post(env, path, body, "reply");
+		let value: unknown = null;
+		try {
+			value = JSON.parse(String(reply.value));
+		} catch {
+			// A gateway error page is not JSON. Keep its status and show no body.
+		}
+		return Response.json(summary(reply.status, value));
+	} catch {
+		return Response.json(
+			{
+				message:
+					"No usable host reply. The host may have started the restore. This case was not retried.",
+			},
+			{ status: 502 },
+		);
+	}
 }
 
 async function scheduled_probe(
@@ -179,7 +266,7 @@ async function scheduled_probe(
 			}
 			const allowedFolder = diagnostic.allowedFolder;
 			const allowedFile = diagnostic.allowedFile;
-			const list = await scheduled_post(
+			const list = await host_post(
 				env,
 				"files/list",
 				{
@@ -207,7 +294,7 @@ async function scheduled_probe(
 				)
 			)
 				throw new Error("Allowed list failed");
-			const read = await scheduled_post(
+			const read = await host_post(
 				env,
 				"files/read",
 				{ path: allowedFile },
@@ -230,14 +317,14 @@ async function scheduled_probe(
 			).join("");
 			if (hash !== diagnostic.allowedFileSha256)
 				throw new Error("Allowed content changed");
-			const denied = await scheduled_post(env, "files/read", {
+			const denied = await host_post(env, "files/read", {
 				path: diagnostic.deniedFile,
 			});
 			// Current hosts answer 403 for a file the user cannot open. Older hosts
 			// answered 404, so accept both for now.
 			if (denied.status !== 403 && denied.status !== 404)
 				throw new Error("Hidden read was not refused");
-			const hiddenList = await scheduled_post(
+			const hiddenList = await host_post(
 				env,
 				"files/list",
 				{
@@ -273,12 +360,7 @@ async function scheduled_probe(
 				);
 			}
 			const readBody = { collection: COLLECTION, key: diagnostic.seedKey };
-			const read = await scheduled_post(
-				env,
-				"plugin-data/read",
-				readBody,
-				true,
-			);
+			const read = await host_post(env, "plugin-data/read", readBody, true);
 			if (
 				read.status !== 200 ||
 				!is_record(read.value) ||
@@ -289,7 +371,7 @@ async function scheduled_probe(
 				diagnostic.seedKey !== `qa-${read.value.document.value.runId}`
 			)
 				throw new Error("Seed read failed");
-			const write = await scheduled_post(env, "plugin-data/write", {
+			const write = await host_post(env, "plugin-data/write", {
 				collection: COLLECTION,
 				key: `qa-${runId}`,
 				value: {
@@ -303,7 +385,7 @@ async function scheduled_probe(
 			});
 			if (caseName === "kv-read-only") {
 				if (write.status !== 403) throw new Error("KV write was not refused");
-				const denied = await scheduled_post(env, "files/read", {
+				const denied = await host_post(env, "files/read", {
 					path: diagnostic.deniedFile,
 				});
 				if (denied.status !== 403)
@@ -313,11 +395,11 @@ async function scheduled_probe(
 					throw new Error("Waiting marker was not saved");
 				// Keep this run alive while the selected user revokes their own consent.
 				await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
-				const revoked = await scheduled_post(env, "plugin-data/read", readBody);
+				const revoked = await host_post(env, "plugin-data/read", readBody);
 				// Stop before follow-up if the old token still works.
 				if (revoked.status !== 401)
 					throw new Error("Old token read was not refused");
-				const followUp = await scheduled_post(env, "plugin-runs/follow-up", {
+				const followUp = await host_post(env, "plugin-runs/follow-up", {
 					state: '{"phase":"done"}',
 				});
 				if (followUp.status !== 401)
@@ -456,6 +538,56 @@ export default {
 					{ message: "Probe saved its document, then answered HTTP 500" },
 					{ status: 500 },
 				);
+			case "restore":
+			case "restore-after-wait": {
+				const input = event.invoke.input;
+				const waitMs = input.waitMs;
+				const body = restore_body(
+					input,
+					caseName === "restore-after-wait" ? ["waitMs"] : [],
+				);
+				if (
+					body === null ||
+					(caseName === "restore-after-wait" &&
+						(typeof waitMs !== "number" ||
+							!Number.isInteger(waitMs) ||
+							waitMs < 0 ||
+							waitMs > 20_000))
+				)
+					return Response.json(
+						{ message: "Expected a small restore request" },
+						{ status: 400 },
+					);
+				// Hold the run token here while QA changes consent or upgrades the plugin.
+				// The wait stays under the 35-second invoke deadline, with the 5-second request after it.
+				if (typeof waitMs === "number")
+					await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+				return restore_reply(env, "files/restore", body, restore_summary);
+			}
+			case "restore-status": {
+				const { jobId, cursor } = event.invoke.input;
+				if (
+					!Object.keys(event.invoke.input).every((key) =>
+						["case", "jobId", "cursor"].includes(key),
+					) ||
+					!short_id(jobId) ||
+					(cursor !== undefined &&
+						cursor !== null &&
+						(typeof cursor !== "string" ||
+							cursor.length < 1 ||
+							cursor.length > 4096))
+				)
+					return Response.json(
+						{ message: "Expected a job ID and an optional cursor" },
+						{ status: 400 },
+					);
+				return restore_reply(
+					env,
+					"files/jobs/get",
+					{ jobId, cursor },
+					job_summary,
+				);
+			}
 			default:
 				return Response.json(
 					{ message: "Unknown probe case" },

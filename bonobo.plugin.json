@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"name": "data-probe",
 	"displayName": "Data Probe",
-	"version": "0.4.5",
-	"description": "Checks backend replies, saved plugin documents, scheduled permission limits, and revocation. Also a QA fixture for the chat agent: one MCP server with an echo tool and one skill. No secrets.",
+	"version": "0.5.0",
+	"description": "Checks backend replies, saved plugin documents, Trash restore, scheduled permission limits, and revocation. Also a QA fixture for the chat agent: one MCP server with an echo tool and one skill. No secrets.",
 	"compatibility": {
 		"bonoboPluginRuntime": "1"
 	},
@@ -52,6 +52,8 @@
 		"plugin.data.read",
 		"plugin.data.write",
 		"workspace.files.read",
+		"workspace.files.write",
+		"workspace.files.restore",
 		"plugin.schedule.run",
 		"plugin.backend.invoke",
 		"agent.mcp.connect",
@@ -72,26 +74,26 @@
 	"files": [
 		{
 			"path": "dist/backend/worker.js",
-			"sha256": "sha256:664548b02c2665c78aa86740b70199748f473e9f75dd4be75058ede60c75b28e",
-			"bytes": 12832,
+			"sha256": "sha256:c234bed729e1b2c2cdd10262c28bc3e39e3db4646ae6ded7c2e86c3587b2b416",
+			"bytes": 18255,
 			"contentType": "application/javascript"
 		},
 		{
 			"path": "dist/frontend/index.html",
-			"sha256": "sha256:6fed213372c9e80b94667e10aa605f92e18a986c26203f62de1fdca028b5ee1b",
-			"bytes": 2143,
+			"sha256": "sha256:dba72c3e87a318f9c6b1ba61bb65a223fd821cb020f48faa71a509c3c95a075b",
+			"bytes": 4407,
 			"contentType": "text/html"
 		},
 		{
 			"path": "dist/frontend/app.js",
-			"sha256": "sha256:9b0309ad0a5d64db8bda768d7059d9bc49dd165b27af8a05b0fe2f8cb7f71b8f",
-			"bytes": 241169,
+			"sha256": "sha256:421f50266cd069c21fc808210efbcf12832a540c5be0d9d060b028ed804351c3",
+			"bytes": 248799,
 			"contentType": "application/javascript"
 		},
 		{
 			"path": "dist/frontend/app.css",
-			"sha256": "sha256:621afa5ef2f5d3a19c5c7a59d7b99f87e1e17d0bf2f97df109819037f53b5e22",
-			"bytes": 938,
+			"sha256": "sha256:55bb33f434159813531e834da5e0a001c81fe403667ed26e3695488b7f2b67cf",
+			"bytes": 968,
 			"contentType": "text/css"
 		},
 		{

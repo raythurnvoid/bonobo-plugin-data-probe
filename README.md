@@ -76,6 +76,30 @@ Canceled host history and the waiting marker do not prove the later 401s. The ho
 
 Scheduled requests have a five-second timeout, manual redirects, no retries, and a 64 KiB JSON reply cap. Malformed settings return 400. Any failed check or host error returns generic 409, without content, tokens, or raw error text. These modes write no mounted files and need no mounted-file billing. Worker and database use still apply. Use real fixture accounts and invites. Do not change credits or customer IDs.
 
+## Restore checks
+
+Since 0.5.0 the plugin also declares `workspace.files.write` and `workspace.files.restore`. A backend run restores items from Trash with its own run token, through `POST /api/v1/files/restore`. It acts as the person who started the run. Read the full rules in the SDK README, section "Restore".
+
+The page has a **Restore from Trash** form:
+
+- **Node ID** and **Delete stamp** (`archiveOperationId`, from `files/trash/list`) send one `nodes` item. **Path** sends one `paths` item. Fill one of the two, not both.
+- **Request ID** (1–64 characters) is required for a real restore. Send the same ID and body again to get the same jobs, also from a later run. A changed body answers 409. A **Dry run** sends no request ID.
+- **When the name is taken** sends `onConflict` (`keep_both` or `skip`). Empty uses the host default. **Force** sends `force: true`. This plugin does not declare Read-only management, so the host should refuse it.
+
+Backend cases:
+
+| Case                 | What it does                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `restore`            | Checks the input strictly (any other key is 400), calls `files/restore` once, and returns a small summary.        |
+| `restore-after-wait` | The same, but first waits `waitMs` (0–20,000) inside the backend. Change consent or upgrade the plugin meanwhile. |
+| `restore-status`     | Takes `{ jobId, cursor? }`, calls `files/jobs/get` with the run token, and returns one page of outcomes.          |
+
+The summary has `hostStatus` and only known fields: job IDs, `isDone`, refusals (`path`, `nodeId`, `message`), dry-run jobs, or the host's `message` and `errorCode`. It never holds a token. Restore replies over 64 KiB, or slower than 5 seconds, return 502 with a fixed message. Nothing retries: the host may already have started the jobs, so send the same request ID again by hand. Scheduled runs never call Restore; the host would refuse them too.
+
+The **Job status** form reads a job with **Job status (page)**, through the page SDK and the page token, or with **Job status (backend run)**, through `restore-status`. After a read, **Page cursor** holds the next `refusedCursor`. It is empty after the last page.
+
+For automation, `#restore-result` and `#job-result` have `data-state` (`idle`, `running`, `done`, `refused`, `no-reply`). `#job-result` also has `data-job-status` with the job's status. Each job in `#restore-jobs` is an item with `data-job-id`. The first job ID fills the Job ID field.
+
 ## Build and review
 
 `src/backend.ts` and `src/frontend.ts` are bundled to the listed `dist/` files. The frontend includes the SDK and readable Preact source, matching the first-party plugins. Generated files are committed for normal GitHub publishing. The manifest script checks file sizes and source-line length and updates hashes.
@@ -91,6 +115,6 @@ vp env exec pnpm run build
 git diff --check
 ```
 
-The two builds must have identical file hashes. Direct tests verify status, complete envelope size, byte chunks, stream failures, host writes, scheduled permission checks, and held revocation. They do not prove live consent, deployed runner/Convex behavior, or browser accessibility. Break each permission check on purpose, observe its named test fail, restore exact source bytes, and pass again before review.
+The two builds must have identical file hashes. Direct tests verify status, complete envelope size, byte chunks, stream failures, host writes, scheduled permission checks, held revocation, and the Restore input checks and summaries. They do not prove live consent, deployed runner/Convex behavior, or browser accessibility. Break each permission check on purpose, observe its named test fail, restore exact source bytes, and pass again before review.
 
-Version 0.4.5 uses the paged Files read API. It keeps SDK 0.23.0 at mirror commit `ea875be3eaf4c51df85233a52fad095b8625c1b5`. Deploy the matching host API first. Confirm that 0.4.5 is unused, then review and publish the exact commit through the normal plugin flow. Update the intended installation with its existing service account, then verify the served version and artifact bytes. No permission, store, or review bypass is part of this fixture.
+Version 0.5.0 adds the Restore checks. It uses SDK 0.25.5 at mirror commit `f065bfed0fabd2ecb9e2c24626b121899e2929bc`. Deploy the matching host API first. Confirm that 0.5.0 is unused, then review and publish the exact commit through the normal plugin flow. Update the intended installation with its existing service account, then verify the served version and artifact bytes. No permission, store, or review bypass is part of this fixture.

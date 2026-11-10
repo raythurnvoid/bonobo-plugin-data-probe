@@ -11,14 +11,18 @@ const env = {
 };
 const encoder = new TextEncoder();
 
-function invoke(caseName: string, runId = "run_123") {
+function invoke(
+	caseName: string,
+	runId = "run_123",
+	input: Record<string, unknown> = {},
+) {
 	return backend.fetch(
 		new Request("https://plugin.local/probe", {
 			method: "POST",
 			body: JSON.stringify({
 				pluginRunId: runId,
 				event: "ui.invoke.requested",
-				invoke: { input: { case: caseName } },
+				invoke: { input: { case: caseName, ...input } },
 			}),
 		}),
 		env,
@@ -231,6 +235,7 @@ describe("scheduled_probe", () => {
 		null,
 		{},
 		{ case: "unknown" },
+		{ case: "restore", paths: ["/allowed/note.txt"], requestId: "qa-1" },
 		{ case: "kv-read-only" },
 		{ ...kvSettings, seedKey: "qa-scheduled_run" },
 		{ ...kvSettings, seedKey: "other" },
@@ -539,6 +544,216 @@ describe("scheduled_probe", () => {
 			409,
 		);
 		assert.equal(calls.length, 2);
+	});
+});
+
+describe("restore probes", () => {
+	const node = {
+		nodeId: "node1",
+		archiveOperationId: "t000001700000000000-abc",
+	};
+	const restoreInput = { nodes: [node], requestId: "qa-1" };
+	for (const [caseName, input] of [
+		["restore", {}],
+		["restore", { ...restoreInput, paths: ["/a"] }],
+		["restore", { paths: [], requestId: "qa-1" }],
+		["restore", { paths: ["relative"], requestId: "qa-1" }],
+		["restore", { nodes: [{ nodeId: "node1" }], requestId: "qa-1" }],
+		["restore", { nodes: [{ ...node, extra: 1 }], requestId: "qa-1" }],
+		["restore", { nodes: [node] }],
+		["restore", { nodes: [node], requestId: "x".repeat(65) }],
+		["restore", { ...restoreInput, dryRun: true }],
+		["restore", { ...restoreInput, onConflict: "replace" }],
+		["restore", { ...restoreInput, force: "yes" }],
+		["restore", { ...restoreInput, token: "x" }],
+		["restore", { ...restoreInput, waitMs: 0 }],
+		["restore-after-wait", restoreInput],
+		["restore-after-wait", { ...restoreInput, waitMs: 20_001 }],
+		["restore-after-wait", { ...restoreInput, waitMs: 1.5 }],
+		["restore-status", {}],
+		["restore-status", { jobId: 3 }],
+		["restore-status", { jobId: "job1", cursor: 5 }],
+		["restore-status", { jobId: "job1", extra: 1 }],
+	] as const) {
+		test(`refuses ${caseName} input ${JSON.stringify(input)}`, async (context) => {
+			const calls = host_replies(context, []);
+			assert.equal((await invoke(caseName, "run_123", input)).status, 400);
+			assert.deepEqual(calls, []);
+		});
+	}
+	test("sends one restore and returns only its summary", async (context) => {
+		const calls = host_replies(context, [
+			Response.json({
+				jobIds: ["job1"],
+				isDone: false,
+				refused: [{ path: null, nodeId: "node2", message: "Not in the Trash" }],
+				token: "test-run-token",
+			}),
+		]);
+		const response = await invoke("restore", "run_123", {
+			...restoreInput,
+			onConflict: "skip",
+		});
+		const text = await response.text();
+		assert.equal(response.status, 200);
+		assert.ok(!text.includes("test-run-token"));
+		assert.deepEqual(JSON.parse(text), {
+			hostStatus: 200,
+			jobIds: ["job1"],
+			isDone: false,
+			refused: [{ path: null, nodeId: "node2", message: "Not in the Trash" }],
+		});
+		assert.deepEqual(calls, [
+			{
+				path: "/api/v1/files/restore",
+				body: { nodes: [node], requestId: "qa-1", onConflict: "skip" },
+			},
+		]);
+	});
+	test("returns the dry-run jobs", async (context) => {
+		host_replies(context, [
+			Response.json({
+				dryRun: true,
+				complete: true,
+				refused: [],
+				jobs: [
+					{
+						kind: "restore",
+						status: "succeeded",
+						errorMessage: null,
+						refused: [],
+						renamed: [{ path: "/a", newPath: "/a (1)" }],
+						hasMoreItems: false,
+					},
+				],
+			}),
+		]);
+		const response = await invoke("restore", "run_123", {
+			paths: ["/a"],
+			dryRun: true,
+		});
+		assert.deepEqual(await response.json(), {
+			hostStatus: 200,
+			dryRun: true,
+			complete: true,
+			refused: [],
+			jobs: [
+				{
+					kind: "restore",
+					status: "succeeded",
+					errorMessage: null,
+					progress: null,
+					refused: [],
+					renamed: [{ path: "/a", newPath: "/a (1)" }],
+					hasMoreItems: false,
+				},
+			],
+		});
+	});
+	for (const [status, body, message] of [
+		[
+			403,
+			'{"message":"Scheduled plugin runs cannot use Trash yet."}',
+			"Scheduled plugin runs cannot use Trash yet.",
+		],
+		[
+			409,
+			'{"message":"Request ID was used with another body"}',
+			"Request ID was used with another body",
+		],
+		[502, "<html>gateway</html>", null],
+	] as const) {
+		test(`keeps host HTTP ${status} and its message without retry`, async (context) => {
+			const calls = host_replies(context, [new Response(body, { status })]);
+			const response = await invoke("restore", "run_123", restoreInput);
+			assert.equal(response.status, 200);
+			assert.deepEqual(await response.json(), {
+				hostStatus: status,
+				message,
+				errorCode: null,
+			});
+			assert.equal(calls.length, 1);
+		});
+	}
+	test("hides restore transport errors and tokens", async (context) => {
+		context.mock.method(globalThis, "fetch", async () => {
+			throw new Error("test-run-token private host detail");
+		});
+		const response = await invoke("restore", "run_123", restoreInput);
+		const text = await response.text();
+		assert.equal(response.status, 502);
+		assert.ok(!text.includes("test-run-token"));
+		assert.ok(!text.includes("private"));
+	});
+	test("waits the asked time before it restores", async (context) => {
+		context.mock.timers.enable({ apis: ["setTimeout"] });
+		const calls = host_replies(context, [
+			Response.json({ jobIds: [], isDone: true, refused: [] }),
+		]);
+		const pending = invoke("restore-after-wait", "run_123", {
+			...restoreInput,
+			waitMs: 20_000,
+		});
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		context.mock.timers.tick(19_999);
+		await Promise.resolve();
+		assert.equal(calls.length, 0);
+		context.mock.timers.tick(1);
+		assert.equal((await pending).status, 200);
+		assert.equal(calls.length, 1);
+		assert.deepEqual(calls[0]!.body, restoreInput);
+	});
+	test("reads a job page and returns only its summary", async (context) => {
+		const calls = host_replies(context, [
+			Response.json({
+				jobId: "job1",
+				kind: "restore",
+				status: "partial",
+				progress: {
+					discovered: 2,
+					total: 2,
+					completed: 1,
+					skipped: 1,
+					blocked: 0,
+					failed: 0,
+					canceled: 0,
+					unit: "items",
+				},
+				errorMessage: null,
+				refused: [{ path: "/a", message: "Name is taken" }],
+				renamed: [],
+				refusedCursor: "sealed-cursor",
+				token: "test-run-token",
+			}),
+		]);
+		const response = await invoke("restore-status", "run_123", {
+			jobId: "job1",
+			cursor: null,
+		});
+		const text = await response.text();
+		assert.ok(!text.includes("test-run-token"));
+		assert.deepEqual(JSON.parse(text), {
+			hostStatus: 200,
+			jobId: "job1",
+			kind: "restore",
+			status: "partial",
+			errorMessage: null,
+			progress: {
+				discovered: 2,
+				total: 2,
+				completed: 1,
+				skipped: 1,
+				blocked: 0,
+				failed: 0,
+				canceled: 0,
+			},
+			refused: [{ path: "/a", nodeId: null, message: "Name is taken" }],
+			renamed: [],
+			refusedCursor: "sealed-cursor",
+		});
+		assert.deepEqual(calls, [
+			{ path: "/api/v1/files/jobs/get", body: { jobId: "job1", cursor: null } },
+		]);
 	});
 });
 

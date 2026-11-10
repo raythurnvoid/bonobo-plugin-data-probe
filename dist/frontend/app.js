@@ -8096,13 +8096,12 @@ async function bonobo_connect() {
 			jwtExpiresAt = 0;
 		}
 	};
-	async function fetchJson(path, body, init) {
+	async function fetchRaw(path, body, init) {
 		const payload = JSON.stringify(body);
 		const send = (bearer) => {
 			const headers = new Headers(init?.headers);
 			headers.set("Authorization", `Bearer ${bearer}`);
 			headers.set("Content-Type", "application/json");
-			headers.set("Accept", "application/json");
 			return fetch(apiOrigin + path, {
 				...init,
 				method: "POST",
@@ -8114,10 +8113,17 @@ async function bonobo_connect() {
 		const firstBearer = await getToken();
 		let response = await send(firstBearer);
 		if (response.status === 401) {
+			await response.body?.cancel();
 			response = await send(
 				token !== firstBearer ? token : await refreshToken(),
 			);
 		}
+		return response;
+	}
+	async function fetchJson(path, body, init) {
+		const headers = new Headers(init?.headers);
+		headers.set("Accept", "application/json");
+		const response = await fetchRaw(path, body, { ...init, headers });
 		const responseText = await response.text();
 		let parsedBody = null;
 		try {
@@ -8256,6 +8262,7 @@ async function bonobo_connect() {
 					apiOrigin,
 					getToken,
 					refreshToken,
+					fetchRaw,
 					fetchJson,
 					authorize,
 					convex: convexClient,
@@ -8386,6 +8393,70 @@ async function bonobo_connect() {
 	return client_promise;
 }
 
+// src/restore-summary.ts
+function is_record(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function short_text(value, maxLength) {
+	return typeof value === "string" && value.length <= maxLength ? value : null;
+}
+function refused_rows(value) {
+	if (!Array.isArray(value)) return [];
+	return value.filter(is_record).map((row) => ({
+		path: short_text(row.path, 1024),
+		nodeId: short_text(row.nodeId, 128),
+		message: short_text(row.message, 300),
+	}));
+}
+function job_fields(value) {
+	const progress = is_record(value.progress) ? value.progress : null;
+	return {
+		kind: short_text(value.kind, 32),
+		status: short_text(value.status, 32),
+		errorMessage: short_text(value.errorMessage, 300),
+		progress:
+			progress &&
+			Object.fromEntries(
+				[
+					"discovered",
+					"total",
+					"completed",
+					"skipped",
+					"blocked",
+					"failed",
+					"canceled",
+				].map((field) => [
+					field,
+					typeof progress[field] === "number" ? progress[field] : null,
+				]),
+			),
+		refused: refused_rows(value.refused),
+		renamed: Array.isArray(value.renamed)
+			? value.renamed.filter(is_record).map((row) => ({
+					path: short_text(row.path, 1024),
+					newPath: short_text(row.newPath, 1024),
+				}))
+			: [],
+	};
+}
+function refusal(hostStatus, value) {
+	return {
+		hostStatus,
+		message: is_record(value) ? short_text(value.message, 300) : null,
+		errorCode: is_record(value) ? short_text(value.errorCode, 64) : null,
+	};
+}
+function job_summary(hostStatus, value) {
+	if (hostStatus !== 200 || !is_record(value))
+		return refusal(hostStatus, value);
+	return {
+		hostStatus,
+		jobId: short_text(value.jobId, 128),
+		...job_fields(value),
+		refusedCursor: short_text(value.refusedCursor, 4096),
+	};
+}
+
 // src/frontend.ts
 var form = document.querySelector("#probe-form");
 var select = document.querySelector("#probe-case");
@@ -8394,15 +8465,32 @@ var refreshButton = document.querySelector("#refresh-probes");
 var status = document.querySelector("#status");
 var result = document.querySelector("#result");
 var saved = document.querySelector("#saved-probes");
+var restoreForm = document.querySelector("#restore-form");
+var restoreNodeId = document.querySelector("#restore-node-id");
+var restoreStamp = document.querySelector("#restore-archive-operation-id");
+var restorePath = document.querySelector("#restore-path");
+var restoreRequestId = document.querySelector("#restore-request-id");
+var restoreConflict = document.querySelector("#restore-on-conflict");
+var restoreDryRun = document.querySelector("#restore-dry-run");
+var restoreForce = document.querySelector("#restore-force");
+var restoreWait = document.querySelector("#restore-wait-ms");
+var restoreButtons = restoreForm.querySelectorAll("button");
+var restoreResult = document.querySelector("#restore-result");
+var restoreJobs = document.querySelector("#restore-jobs");
+var jobForm = document.querySelector("#job-form");
+var jobId = document.querySelector("#job-id");
+var jobCursor = document.querySelector("#job-cursor");
+var jobButtons = jobForm.querySelectorAll("button");
+var jobResult = document.querySelector("#job-result");
 var encoder = new TextEncoder();
-function is_record(value) {
+function is_record2(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function small_message(output) {
 	if (output.length > 4096 || output.length === 0) return null;
 	try {
 		const parsed = JSON.parse(output);
-		return is_record(parsed) && typeof parsed.message === "string"
+		return is_record2(parsed) && typeof parsed.message === "string"
 			? parsed.message.slice(0, 300)
 			: null;
 	} catch {
@@ -8413,6 +8501,8 @@ async function connect() {
 	const client = await bonobo_connect();
 	runButton.disabled = false;
 	refreshButton.disabled = false;
+	for (const button of [...restoreButtons, ...jobButtons])
+		button.disabled = false;
 	status.textContent = "Ready.";
 	form.addEventListener("submit", async (event) => {
 		event.preventDefault();
@@ -8430,7 +8520,7 @@ async function connect() {
 			const body = response.body;
 			if (
 				response.status === 200 &&
-				is_record(body) &&
+				is_record2(body) &&
 				typeof body.runId === "string" &&
 				typeof body.pluginStatus === "number" &&
 				typeof body.output === "string"
@@ -8460,15 +8550,15 @@ async function connect() {
 						case: caseName,
 						status: response.status,
 						runId:
-							is_record(body) && typeof body.runId === "string"
+							is_record2(body) && typeof body.runId === "string"
 								? body.runId
 								: null,
 						code:
-							is_record(body) && typeof body.code === "string"
+							is_record2(body) && typeof body.code === "string"
 								? body.code.slice(0, 64)
 								: null,
 						message:
-							is_record(body) && typeof body.message === "string"
+							is_record2(body) && typeof body.message === "string"
 								? body.message.slice(0, 300)
 								: "Invalid host reply",
 					},
@@ -8505,7 +8595,7 @@ async function connect() {
 			const body = response.body;
 			if (
 				response.status !== 200 ||
-				!is_record(body) ||
+				!is_record2(body) ||
 				!Array.isArray(body.documents)
 			) {
 				status.textContent = `Saved document read refused with HTTP ${response.status}.`;
@@ -8514,9 +8604,9 @@ async function connect() {
 			saved.replaceChildren();
 			for (const doc of body.documents) {
 				if (
-					!is_record(doc) ||
+					!is_record2(doc) ||
 					typeof doc.key !== "string" ||
-					!is_record(doc.value)
+					!is_record2(doc.value)
 				)
 					continue;
 				const caseName =
@@ -8534,6 +8624,151 @@ async function connect() {
 		} finally {
 			refreshButton.disabled = false;
 			runButton.disabled = false;
+		}
+	});
+	async function invoke_backend(input) {
+		const response = await client.fetchJson("/api/v1/plugin-backend/invoke", {
+			endpoint: "probe",
+			input,
+		});
+		const body = response.body;
+		if (
+			response.status !== 200 ||
+			!is_record2(body) ||
+			typeof body.runId !== "string" ||
+			typeof body.pluginStatus !== "number" ||
+			typeof body.output !== "string"
+		)
+			return {
+				status: response.status,
+				message:
+					is_record2(body) && typeof body.message === "string"
+						? body.message.slice(0, 300)
+						: "Invalid host reply",
+				output: null,
+			};
+		let output = null;
+		try {
+			output = JSON.parse(body.output);
+		} catch {}
+		return {
+			status: response.status,
+			runId: body.runId,
+			pluginStatus: body.pluginStatus,
+			output: is_record2(output) ? output : null,
+		};
+	}
+	restoreForm.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		const caseName =
+			event.submitter?.id === "run-restore-after-wait"
+				? "restore-after-wait"
+				: "restore";
+		const input = { case: caseName };
+		if (restoreNodeId.value !== "" || restoreStamp.value !== "")
+			input.nodes = [
+				{
+					nodeId: restoreNodeId.value.trim(),
+					archiveOperationId: restoreStamp.value.trim(),
+				},
+			];
+		if (restorePath.value !== "") input.paths = [restorePath.value];
+		if (restoreRequestId.value !== "") input.requestId = restoreRequestId.value;
+		if (restoreConflict.value !== "") input.onConflict = restoreConflict.value;
+		if (restoreDryRun.checked) input.dryRun = true;
+		if (restoreForce.checked) input.force = true;
+		if (caseName === "restore-after-wait")
+			input.waitMs = restoreWait.valueAsNumber;
+		for (const button of restoreButtons) button.disabled = true;
+		restoreForm.setAttribute("aria-busy", "true");
+		restoreResult.dataset.state = "running";
+		restoreResult.textContent = `Running ${caseName}\u2026`;
+		restoreJobs.replaceChildren();
+		try {
+			const reply = await invoke_backend(input);
+			restoreResult.textContent = JSON.stringify(
+				{ case: caseName, ...reply },
+				null,
+				2,
+			);
+			const jobIds = Array.isArray(reply.output?.jobIds)
+				? reply.output.jobIds.filter((id) => typeof id === "string")
+				: [];
+			for (const id of jobIds) {
+				const item = document.createElement("li");
+				item.dataset.jobId = id;
+				item.textContent = `Job ${id}`;
+				restoreJobs.append(item);
+			}
+			if (jobIds[0]) {
+				jobId.value = jobIds[0];
+				jobCursor.value = "";
+			}
+			restoreResult.dataset.state =
+				reply.output?.hostStatus === 200 ? "done" : "refused";
+		} catch {
+			restoreResult.dataset.state = "no-reply";
+			restoreResult.textContent = JSON.stringify(
+				{
+					case: caseName,
+					status: "No response",
+					message:
+						"The host may have started the restore. Send the same request ID again to read the same jobs.",
+				},
+				null,
+				2,
+			);
+		} finally {
+			for (const button of restoreButtons) button.disabled = false;
+			restoreForm.removeAttribute("aria-busy");
+		}
+	});
+	jobForm.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		const reader =
+			event.submitter?.id === "read-job-backend" ? "backend run" : "page";
+		const request = {
+			jobId: jobId.value.trim(),
+			cursor: jobCursor.value === "" ? null : jobCursor.value,
+		};
+		for (const button of jobButtons) button.disabled = true;
+		jobForm.setAttribute("aria-busy", "true");
+		jobResult.dataset.state = "running";
+		jobResult.dataset.jobStatus = "";
+		jobResult.textContent = "Reading the job\u2026";
+		try {
+			let job;
+			if (reader === "backend run") {
+				const reply = await invoke_backend({
+					case: "restore-status",
+					...request,
+				});
+				job = reply.output;
+				jobResult.textContent = JSON.stringify({ reader, ...reply }, null, 2);
+			} else {
+				const response = await client.fetchJson(
+					"/api/v1/files/jobs/get",
+					request,
+				);
+				job = job_summary(response.status, response.body);
+				jobResult.textContent = JSON.stringify({ reader, ...job }, null, 2);
+			}
+			jobResult.dataset.state = job?.hostStatus === 200 ? "done" : "refused";
+			jobResult.dataset.jobStatus =
+				typeof job?.status === "string" ? job.status : "";
+			if (job?.hostStatus === 200)
+				jobCursor.value =
+					typeof job.refusedCursor === "string" ? job.refusedCursor : "";
+		} catch {
+			jobResult.dataset.state = "no-reply";
+			jobResult.textContent = JSON.stringify(
+				{ reader, status: "No response" },
+				null,
+				2,
+			);
+		} finally {
+			for (const button of jobButtons) button.disabled = false;
+			jobForm.removeAttribute("aria-busy");
 		}
 	});
 }

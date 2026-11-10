@@ -34,7 +34,8 @@ label {
 	font-weight: 600;
 }
 button,
-select {
+select,
+input:not([type="checkbox"]) {
 	min-height: 44px;
 	padding: 8px 12px;
 	border: 1px solid currentColor;

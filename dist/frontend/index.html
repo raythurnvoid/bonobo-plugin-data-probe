@@ -48,6 +48,65 @@
 				Refresh saved documents
 			</button>
 			<ul id="saved-probes"></ul>
+			<h2>Restore from Trash</h2>
+			<form id="restore-form">
+				<p id="restore-help">
+					Fill a node ID and its delete stamp, or a path. A real restore needs a
+					request ID. Send the same ID and body again to get the same jobs. A
+					dry run needs no request ID. Nothing retries by itself.
+				</p>
+				<label for="restore-node-id">Node ID</label>
+				<input id="restore-node-id" autocomplete="off" />
+				<label for="restore-archive-operation-id">
+					Delete stamp (archiveOperationId)
+				</label>
+				<input id="restore-archive-operation-id" autocomplete="off" />
+				<label for="restore-path">Path</label>
+				<input
+					id="restore-path"
+					autocomplete="off"
+					placeholder="/folder/file.md"
+				/>
+				<label for="restore-request-id">Request ID</label>
+				<input id="restore-request-id" autocomplete="off" maxlength="64" />
+				<label for="restore-on-conflict">When the name is taken</label>
+				<select id="restore-on-conflict">
+					<option value="">Host default (Keep both)</option>
+					<option value="keep_both">Keep both</option>
+					<option value="skip">Skip</option>
+				</select>
+				<label><input id="restore-dry-run" type="checkbox" /> Dry run</label>
+				<label><input id="restore-force" type="checkbox" /> Force</label>
+				<label for="restore-wait-ms">Wait before restore (milliseconds)</label>
+				<input
+					id="restore-wait-ms"
+					type="number"
+					min="0"
+					max="20000"
+					step="1000"
+					value="15000"
+				/>
+				<button id="run-restore" type="submit" disabled>Restore</button>
+				<button id="run-restore-after-wait" type="submit" disabled>
+					Restore after wait
+				</button>
+			</form>
+			<pre id="restore-result" data-state="idle">No restore yet.</pre>
+			<ul id="restore-jobs"></ul>
+			<h2>Job status</h2>
+			<form id="job-form">
+				<label for="job-id">Job ID</label>
+				<input id="job-id" autocomplete="off" />
+				<label for="job-cursor">Page cursor (empty for the first page)</label>
+				<input id="job-cursor" autocomplete="off" />
+				<button id="read-job-page" type="submit" disabled>
+					Job status (page)
+				</button>
+				<button id="read-job-backend" type="submit" disabled>
+					Job status (backend run)
+				</button>
+			</form>
+			<pre id="job-result" data-state="idle">No job read yet.</pre>
 		</main>
 		<script type="module" src="./app.js"></script>
 	</body>

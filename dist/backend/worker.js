@@ -1,9 +1,98 @@
+// src/restore-summary.ts
+function is_record(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function short_text(value, maxLength) {
+	return typeof value === "string" && value.length <= maxLength ? value : null;
+}
+function refused_rows(value) {
+	if (!Array.isArray(value)) return [];
+	return value.filter(is_record).map((row) => ({
+		path: short_text(row.path, 1024),
+		nodeId: short_text(row.nodeId, 128),
+		message: short_text(row.message, 300),
+	}));
+}
+function job_fields(value) {
+	const progress = is_record(value.progress) ? value.progress : null;
+	return {
+		kind: short_text(value.kind, 32),
+		status: short_text(value.status, 32),
+		errorMessage: short_text(value.errorMessage, 300),
+		progress:
+			progress &&
+			Object.fromEntries(
+				[
+					"discovered",
+					"total",
+					"completed",
+					"skipped",
+					"blocked",
+					"failed",
+					"canceled",
+				].map((field) => [
+					field,
+					typeof progress[field] === "number" ? progress[field] : null,
+				]),
+			),
+		refused: refused_rows(value.refused),
+		renamed: Array.isArray(value.renamed)
+			? value.renamed.filter(is_record).map((row) => ({
+					path: short_text(row.path, 1024),
+					newPath: short_text(row.newPath, 1024),
+				}))
+			: [],
+	};
+}
+function refusal(hostStatus, value) {
+	return {
+		hostStatus,
+		message: is_record(value) ? short_text(value.message, 300) : null,
+		errorCode: is_record(value) ? short_text(value.errorCode, 64) : null,
+	};
+}
+function restore_summary(hostStatus, value) {
+	if (hostStatus !== 200 || !is_record(value))
+		return refusal(hostStatus, value);
+	if (value.dryRun === true)
+		return {
+			hostStatus,
+			dryRun: true,
+			complete: value.complete === true,
+			refused: refused_rows(value.refused),
+			jobs: Array.isArray(value.jobs)
+				? value.jobs.filter(is_record).map((job) => ({
+						...job_fields(job),
+						hasMoreItems: job.hasMoreItems === true,
+					}))
+				: [],
+		};
+	return {
+		hostStatus,
+		jobIds: Array.isArray(value.jobIds)
+			? value.jobIds.filter((id) => short_text(id, 128) !== null)
+			: [],
+		isDone: value.isDone === true,
+		refused: refused_rows(value.refused),
+	};
+}
+function job_summary(hostStatus, value) {
+	if (hostStatus !== 200 || !is_record(value))
+		return refusal(hostStatus, value);
+	return {
+		hostStatus,
+		jobId: short_text(value.jobId, 128),
+		...job_fields(value),
+		refusedCursor: short_text(value.refusedCursor, 4096),
+	};
+}
+
 // src/backend.ts
 var MAX_REPLY_BYTES = 16 * 1024 * 1024;
 var MAX_HOST_REPLY_BYTES = 64 * 1024;
 var COLLECTION = "response_probes";
 var encoder = new TextEncoder();
-function is_record(value) {
+function is_record2(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function filled_reply(runId, targetBytes, token) {
@@ -62,7 +151,7 @@ async function write_probe(env, runId, caseName) {
 			`Probe document write refused with HTTP ${response.status}`,
 		);
 }
-async function scheduled_post(env, path, body, readBody = false) {
+async function host_post(env, path, body, readBody = false) {
 	const response = await fetch(`${env.BONOBO.host.apiOrigin}/api/v1/${path}`, {
 		method: "POST",
 		redirect: "manual",
@@ -74,7 +163,7 @@ async function scheduled_post(env, path, body, readBody = false) {
 		body: JSON.stringify(body),
 	});
 	let value = null;
-	if (response.status !== 200 || !readBody) {
+	if (!readBody || (response.status !== 200 && readBody !== "reply")) {
 		await response.body?.cancel();
 		return { status: response.status, value };
 	}
@@ -96,7 +185,7 @@ async function scheduled_post(env, path, body, readBody = false) {
 			text += decoder.decode(next.value, { stream: true });
 		}
 		text += decoder.decode();
-		value = readBody === "text" ? text : JSON.parse(text);
+		value = readBody === true ? JSON.parse(text) : text;
 	} finally {
 		await reader.cancel();
 	}
@@ -116,14 +205,80 @@ function saved_path(value) {
 			.every((part) => part !== "" && part !== "." && part !== "..")
 	);
 }
+function short_id(value) {
+	return typeof value === "string" && /^[-_a-zA-Z0-9]{1,128}$/u.test(value);
+}
+function restore_body(input, extraKeys) {
+	const keys = [
+		"case",
+		"paths",
+		"nodes",
+		"requestId",
+		"onConflict",
+		"force",
+		"dryRun",
+		...extraKeys,
+	];
+	if (!Object.keys(input).every((key) => keys.includes(key))) return null;
+	const { paths, nodes, requestId, onConflict, force, dryRun } = input;
+	const items = paths ?? nodes;
+	if (
+		(paths === void 0) === (nodes === void 0) ||
+		!Array.isArray(items) ||
+		items.length < 1 ||
+		items.length > 100 ||
+		(paths !== void 0 && !items.every(saved_path)) ||
+		(nodes !== void 0 &&
+			!items.every(
+				(node) =>
+					is_record2(node) &&
+					Object.keys(node).length === 2 &&
+					short_id(node.nodeId) &&
+					short_id(node.archiveOperationId),
+			)) ||
+		(onConflict !== void 0 &&
+			onConflict !== "keep_both" &&
+			onConflict !== "skip") ||
+		(force !== void 0 && typeof force !== "boolean") ||
+		(dryRun !== void 0 && typeof dryRun !== "boolean")
+	)
+		return null;
+	if (
+		dryRun === true
+			? requestId !== void 0
+			: typeof requestId !== "string" ||
+				requestId.length < 1 ||
+				requestId.length > 64
+	)
+		return null;
+	return { paths, nodes, requestId, onConflict, force, dryRun };
+}
+async function restore_reply(env, path, body, summary) {
+	try {
+		const reply = await host_post(env, path, body, "reply");
+		let value = null;
+		try {
+			value = JSON.parse(String(reply.value));
+		} catch {}
+		return Response.json(summary(reply.status, value));
+	} catch {
+		return Response.json(
+			{
+				message:
+					"No usable host reply. The host may have started the restore. This case was not retried.",
+			},
+			{ status: 502 },
+		);
+	}
+}
 async function scheduled_probe(env, runId, event) {
 	if (
-		!is_record(event.chain) ||
+		!is_record2(event.chain) ||
 		event.chain.rootRunId !== runId ||
 		event.chain.index !== 0 ||
 		event.chain.state !== null ||
-		!is_record(event.configuration) ||
-		!is_record(event.configuration.diagnostic) ||
+		!is_record2(event.configuration) ||
+		!is_record2(event.configuration.diagnostic) ||
 		!/^[-_a-zA-Z0-9]{1,128}$/u.test(runId)
 	) {
 		return Response.json(
@@ -166,7 +321,7 @@ async function scheduled_probe(env, runId, event) {
 			}
 			const allowedFolder = diagnostic.allowedFolder;
 			const allowedFile = diagnostic.allowedFile;
-			const list = await scheduled_post(
+			const list = await host_post(
 				env,
 				"files/list",
 				{
@@ -179,22 +334,22 @@ async function scheduled_probe(env, runId, event) {
 			);
 			if (
 				list.status !== 200 ||
-				!is_record(list.value) ||
+				!is_record2(list.value) ||
 				list.value.isDone !== true ||
 				!Array.isArray(list.value.items) ||
 				list.value.items.length > 10 ||
 				!list.value.items.every(
 					(item) =>
-						is_record(item) &&
+						is_record2(item) &&
 						saved_path(item.path) &&
 						item.path.startsWith(`${allowedFolder}/`),
 				) ||
 				!list.value.items.some(
-					(item) => is_record(item) && item.path === allowedFile,
+					(item) => is_record2(item) && item.path === allowedFile,
 				)
 			)
 				throw new Error("Allowed list failed");
-			const read = await scheduled_post(
+			const read = await host_post(
 				env,
 				"files/read",
 				{ path: allowedFile },
@@ -214,12 +369,12 @@ async function scheduled_probe(env, runId, event) {
 			).join("");
 			if (hash !== diagnostic.allowedFileSha256)
 				throw new Error("Allowed content changed");
-			const denied = await scheduled_post(env, "files/read", {
+			const denied = await host_post(env, "files/read", {
 				path: diagnostic.deniedFile,
 			});
 			if (denied.status !== 403 && denied.status !== 404)
 				throw new Error("Hidden read was not refused");
-			const hiddenList = await scheduled_post(
+			const hiddenList = await host_post(
 				env,
 				"files/list",
 				{
@@ -234,7 +389,7 @@ async function scheduled_probe(env, runId, event) {
 				hiddenList.status !== 403 &&
 				hiddenList.status !== 404 &&
 				(hiddenList.status !== 200 ||
-					!is_record(hiddenList.value) ||
+					!is_record2(hiddenList.value) ||
 					hiddenList.value.isDone !== true ||
 					!Array.isArray(hiddenList.value.items) ||
 					hiddenList.value.items.length !== 0)
@@ -253,23 +408,18 @@ async function scheduled_probe(env, runId, event) {
 				);
 			}
 			const readBody = { collection: COLLECTION, key: diagnostic.seedKey };
-			const read = await scheduled_post(
-				env,
-				"plugin-data/read",
-				readBody,
-				true,
-			);
+			const read = await host_post(env, "plugin-data/read", readBody, true);
 			if (
 				read.status !== 200 ||
-				!is_record(read.value) ||
-				!is_record(read.value.document) ||
-				!is_record(read.value.document.value) ||
+				!is_record2(read.value) ||
+				!is_record2(read.value.document) ||
+				!is_record2(read.value.document.value) ||
 				read.value.document.value.case !== "write-500" ||
 				typeof read.value.document.value.runId !== "string" ||
 				diagnostic.seedKey !== `qa-${read.value.document.value.runId}`
 			)
 				throw new Error("Seed read failed");
-			const write = await scheduled_post(env, "plugin-data/write", {
+			const write = await host_post(env, "plugin-data/write", {
 				collection: COLLECTION,
 				key: `qa-${runId}`,
 				value: {
@@ -283,7 +433,7 @@ async function scheduled_probe(env, runId, event) {
 			});
 			if (caseName === "kv-read-only") {
 				if (write.status !== 403) throw new Error("KV write was not refused");
-				const denied = await scheduled_post(env, "files/read", {
+				const denied = await host_post(env, "files/read", {
 					path: diagnostic.deniedFile,
 				});
 				if (denied.status !== 403)
@@ -292,10 +442,10 @@ async function scheduled_probe(env, runId, event) {
 				if (write.status !== 200)
 					throw new Error("Waiting marker was not saved");
 				await new Promise((resolve) => setTimeout(resolve, 3e4));
-				const revoked = await scheduled_post(env, "plugin-data/read", readBody);
+				const revoked = await host_post(env, "plugin-data/read", readBody);
 				if (revoked.status !== 401)
 					throw new Error("Old token read was not refused");
-				const followUp = await scheduled_post(env, "plugin-runs/follow-up", {
+				const followUp = await host_post(env, "plugin-runs/follow-up", {
 					state: '{"phase":"done"}',
 				});
 				if (followUp.status !== 401)
@@ -315,7 +465,7 @@ var backend_default = {
 	async fetch(request, env) {
 		const event = await request.json();
 		if (
-			!is_record(event) ||
+			!is_record2(event) ||
 			typeof event.pluginRunId !== "string" ||
 			event.pluginRunId.length === 0
 		) {
@@ -328,7 +478,7 @@ var backend_default = {
 				return scheduled_probe(env, runId, event);
 			if (
 				event.event !== "files.upload.completed" ||
-				!is_record(event.source) ||
+				!is_record2(event.source) ||
 				event.source.contentType !== "image/png" ||
 				typeof event.source.name !== "string"
 			) {
@@ -344,8 +494,8 @@ var backend_default = {
 		if (
 			path !== "/probe" ||
 			event.event !== "ui.invoke.requested" ||
-			!is_record(event.invoke) ||
-			!is_record(event.invoke.input) ||
+			!is_record2(event.invoke) ||
+			!is_record2(event.invoke.input) ||
 			typeof event.invoke.input.case !== "string"
 		) {
 			return Response.json(
@@ -432,6 +582,54 @@ var backend_default = {
 					{ message: "Probe saved its document, then answered HTTP 500" },
 					{ status: 500 },
 				);
+			case "restore":
+			case "restore-after-wait": {
+				const input = event.invoke.input;
+				const waitMs = input.waitMs;
+				const body = restore_body(
+					input,
+					caseName === "restore-after-wait" ? ["waitMs"] : [],
+				);
+				if (
+					body === null ||
+					(caseName === "restore-after-wait" &&
+						(typeof waitMs !== "number" ||
+							!Number.isInteger(waitMs) ||
+							waitMs < 0 ||
+							waitMs > 2e4))
+				)
+					return Response.json(
+						{ message: "Expected a small restore request" },
+						{ status: 400 },
+					);
+				if (typeof waitMs === "number")
+					await new Promise((resolve) => setTimeout(resolve, waitMs));
+				return restore_reply(env, "files/restore", body, restore_summary);
+			}
+			case "restore-status": {
+				const { jobId, cursor } = event.invoke.input;
+				if (
+					!Object.keys(event.invoke.input).every((key) =>
+						["case", "jobId", "cursor"].includes(key),
+					) ||
+					!short_id(jobId) ||
+					(cursor !== void 0 &&
+						cursor !== null &&
+						(typeof cursor !== "string" ||
+							cursor.length < 1 ||
+							cursor.length > 4096))
+				)
+					return Response.json(
+						{ message: "Expected a job ID and an optional cursor" },
+						{ status: 400 },
+					);
+				return restore_reply(
+					env,
+					"files/jobs/get",
+					{ jobId, cursor },
+					job_summary,
+				);
+			}
 			default:
 				return Response.json(
 					{ message: "Unknown probe case" },

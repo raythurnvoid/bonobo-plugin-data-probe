@@ -1,4 +1,5 @@
 import { bonobo_connect } from "bonobo-plugin-sdk/frontend";
+import { job_summary } from "./restore-summary.ts";
 
 const form = document.querySelector<HTMLFormElement>("#probe-form")!;
 const select = document.querySelector<HTMLSelectElement>("#probe-case")!;
@@ -8,6 +9,35 @@ const refreshButton =
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const result = document.querySelector<HTMLPreElement>("#result")!;
 const saved = document.querySelector<HTMLUListElement>("#saved-probes")!;
+const restoreForm = document.querySelector<HTMLFormElement>("#restore-form")!;
+const restoreNodeId =
+	document.querySelector<HTMLInputElement>("#restore-node-id")!;
+const restoreStamp = document.querySelector<HTMLInputElement>(
+	"#restore-archive-operation-id",
+)!;
+const restorePath = document.querySelector<HTMLInputElement>("#restore-path")!;
+const restoreRequestId = document.querySelector<HTMLInputElement>(
+	"#restore-request-id",
+)!;
+const restoreConflict = document.querySelector<HTMLSelectElement>(
+	"#restore-on-conflict",
+)!;
+const restoreDryRun =
+	document.querySelector<HTMLInputElement>("#restore-dry-run")!;
+const restoreForce =
+	document.querySelector<HTMLInputElement>("#restore-force")!;
+const restoreWait =
+	document.querySelector<HTMLInputElement>("#restore-wait-ms")!;
+const restoreButtons =
+	restoreForm.querySelectorAll<HTMLButtonElement>("button");
+const restoreResult =
+	document.querySelector<HTMLPreElement>("#restore-result")!;
+const restoreJobs = document.querySelector<HTMLUListElement>("#restore-jobs")!;
+const jobForm = document.querySelector<HTMLFormElement>("#job-form")!;
+const jobId = document.querySelector<HTMLInputElement>("#job-id")!;
+const jobCursor = document.querySelector<HTMLInputElement>("#job-cursor")!;
+const jobButtons = jobForm.querySelectorAll<HTMLButtonElement>("button");
+const jobResult = document.querySelector<HTMLPreElement>("#job-result")!;
 const encoder = new TextEncoder();
 
 function is_record(value: unknown): value is Record<string, unknown> {
@@ -30,6 +60,8 @@ async function connect() {
 	const client = await bonobo_connect();
 	runButton.disabled = false;
 	refreshButton.disabled = false;
+	for (const button of [...restoreButtons, ...jobButtons])
+		button.disabled = false;
 	status.textContent = "Ready.";
 	form.addEventListener("submit", async (event) => {
 		event.preventDefault();
@@ -151,6 +183,161 @@ async function connect() {
 		} finally {
 			refreshButton.disabled = false;
 			runButton.disabled = false;
+		}
+	});
+
+	// Run one backend case. Show the backend's own small summary, never the raw host reply.
+	async function invoke_backend(input: Record<string, unknown>) {
+		const response = await client.fetchJson("/api/v1/plugin-backend/invoke", {
+			endpoint: "probe",
+			input,
+		});
+		const body: unknown = response.body;
+		if (
+			response.status !== 200 ||
+			!is_record(body) ||
+			typeof body.runId !== "string" ||
+			typeof body.pluginStatus !== "number" ||
+			typeof body.output !== "string"
+		)
+			return {
+				status: response.status,
+				message:
+					is_record(body) && typeof body.message === "string"
+						? body.message.slice(0, 300)
+						: "Invalid host reply",
+				output: null,
+			};
+		let output: unknown = null;
+		try {
+			output = JSON.parse(body.output);
+		} catch {
+			// The backend always answers JSON. Show null if it did not.
+		}
+		return {
+			status: response.status,
+			runId: body.runId,
+			pluginStatus: body.pluginStatus,
+			output: is_record(output) ? output : null,
+		};
+	}
+
+	restoreForm.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		const caseName =
+			event.submitter?.id === "run-restore-after-wait"
+				? "restore-after-wait"
+				: "restore";
+		// Send only the filled fields. The backend refuses a bad mix with 400.
+		const input: Record<string, unknown> = { case: caseName };
+		if (restoreNodeId.value !== "" || restoreStamp.value !== "")
+			input.nodes = [
+				{
+					nodeId: restoreNodeId.value.trim(),
+					archiveOperationId: restoreStamp.value.trim(),
+				},
+			];
+		if (restorePath.value !== "") input.paths = [restorePath.value];
+		if (restoreRequestId.value !== "") input.requestId = restoreRequestId.value;
+		if (restoreConflict.value !== "") input.onConflict = restoreConflict.value;
+		if (restoreDryRun.checked) input.dryRun = true;
+		if (restoreForce.checked) input.force = true;
+		if (caseName === "restore-after-wait")
+			input.waitMs = restoreWait.valueAsNumber;
+		for (const button of restoreButtons) button.disabled = true;
+		restoreForm.setAttribute("aria-busy", "true");
+		restoreResult.dataset.state = "running";
+		restoreResult.textContent = `Running ${caseName}…`;
+		restoreJobs.replaceChildren();
+		try {
+			const reply = await invoke_backend(input);
+			restoreResult.textContent = JSON.stringify(
+				{ case: caseName, ...reply },
+				null,
+				2,
+			);
+			const jobIds = Array.isArray(reply.output?.jobIds)
+				? reply.output.jobIds.filter((id) => typeof id === "string")
+				: [];
+			for (const id of jobIds) {
+				const item = document.createElement("li");
+				item.dataset.jobId = id;
+				item.textContent = `Job ${id}`;
+				restoreJobs.append(item);
+			}
+			// Put the first job in the status form, so QA can read it next.
+			if (jobIds[0]) {
+				jobId.value = jobIds[0];
+				jobCursor.value = "";
+			}
+			restoreResult.dataset.state =
+				reply.output?.hostStatus === 200 ? "done" : "refused";
+		} catch {
+			restoreResult.dataset.state = "no-reply";
+			restoreResult.textContent = JSON.stringify(
+				{
+					case: caseName,
+					status: "No response",
+					message:
+						"The host may have started the restore. Send the same request ID again to read the same jobs.",
+				},
+				null,
+				2,
+			);
+		} finally {
+			for (const button of restoreButtons) button.disabled = false;
+			restoreForm.removeAttribute("aria-busy");
+		}
+	});
+
+	jobForm.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		const reader =
+			event.submitter?.id === "read-job-backend" ? "backend run" : "page";
+		const request = {
+			jobId: jobId.value.trim(),
+			cursor: jobCursor.value === "" ? null : jobCursor.value,
+		};
+		for (const button of jobButtons) button.disabled = true;
+		jobForm.setAttribute("aria-busy", "true");
+		jobResult.dataset.state = "running";
+		jobResult.dataset.jobStatus = "";
+		jobResult.textContent = "Reading the job…";
+		try {
+			let job: Record<string, unknown> | null;
+			if (reader === "backend run") {
+				const reply = await invoke_backend({
+					case: "restore-status",
+					...request,
+				});
+				job = reply.output;
+				jobResult.textContent = JSON.stringify({ reader, ...reply }, null, 2);
+			} else {
+				// The page reads with its own page token, not with a backend run.
+				const response = await client.fetchJson(
+					"/api/v1/files/jobs/get",
+					request,
+				);
+				job = job_summary(response.status, response.body);
+				jobResult.textContent = JSON.stringify({ reader, ...job }, null, 2);
+			}
+			jobResult.dataset.state = job?.hostStatus === 200 ? "done" : "refused";
+			jobResult.dataset.jobStatus =
+				typeof job?.status === "string" ? job.status : "";
+			// Fill the next page cursor. It is empty after the last page.
+			if (job?.hostStatus === 200)
+				jobCursor.value =
+					typeof job.refusedCursor === "string" ? job.refusedCursor : "";
+		} catch {
+			jobResult.dataset.state = "no-reply";
+			jobResult.textContent = JSON.stringify(
+				{ reader, status: "No response" },
+				null,
+				2,
+			);
+		} finally {
+			for (const button of jobButtons) button.disabled = false;
+			jobForm.removeAttribute("aria-busy");
 		}
 	});
 }
