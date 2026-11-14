@@ -112,9 +112,9 @@ async function connect() {
 							is_record(body) && typeof body.runId === "string"
 								? body.runId
 								: null,
-						code:
-							is_record(body) && typeof body.code === "string"
-								? body.code.slice(0, 64)
+						errorCode:
+							is_record(body) && typeof body.errorCode === "string"
+								? body.errorCode.slice(0, 64)
 								: null,
 						message:
 							is_record(body) && typeof body.message === "string"
