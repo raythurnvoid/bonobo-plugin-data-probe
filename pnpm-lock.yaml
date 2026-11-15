@@ -167,8 +167,8 @@ importers:
   .:
     dependencies:
       bonobo-plugin-sdk:
-        specifier: github:raythurnvoid/bonobo-plugin-sdk#f065bfed0fabd2ecb9e2c24626b121899e2929bc
-        version: https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/f065bfed0fabd2ecb9e2c24626b121899e2929bc(convex@1.47.0(react@19.3.1))(react@19.3.1)
+        specifier: github:raythurnvoid/bonobo-plugin-sdk#0d8660b9d8ec405ae395171db387b542717f7dff
+        version: https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/0d8660b9d8ec405ae395171db387b542717f7dff(convex@1.47.0(react@19.3.1))(react@19.3.1)
       convex:
         specifier: 1.47.0
         version: 1.47.0(react@19.3.1)
@@ -632,9 +632,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  bonobo-plugin-sdk@https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/f065bfed0fabd2ecb9e2c24626b121899e2929bc:
-    resolution: {gitHosted: true, integrity: sha512-to6vUroF183JII4SRU1wk3iY65NBwgYfjIwUzzAygKFSz6DCaolvA0WpiaD3wT4YcyYZq7slbf8vJ3a78eBdxw==, tarball: https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/f065bfed0fabd2ecb9e2c24626b121899e2929bc}
-    version: 0.25.5
+  bonobo-plugin-sdk@https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/0d8660b9d8ec405ae395171db387b542717f7dff:
+    resolution: {gitHosted: true, integrity: sha512-Eps5epVVZtIbYcjofKAsu/dw3oOQIASmPoUbgdkru+jAxt5Amn4SKus1cTfD56Bl0UlSY8TCRYUJbD4tV5YKDw==, tarball: https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/0d8660b9d8ec405ae395171db387b542717f7dff}
+    version: 0.26.1
     peerDependencies:
       convex: ^1.46.0
       react: ^19.3.0
@@ -929,7 +929,7 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  bonobo-plugin-sdk@https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/f065bfed0fabd2ecb9e2c24626b121899e2929bc(convex@1.47.0(react@19.3.1))(react@19.3.1):
+  bonobo-plugin-sdk@https://codeload.github.com/raythurnvoid/bonobo-plugin-sdk/tar.gz/0d8660b9d8ec405ae395171db387b542717f7dff(convex@1.47.0(react@19.3.1))(react@19.3.1):
     dependencies:
       '@cloudflare/workers-types': 4.20260702.1
       convex: 1.47.0(react@19.3.1)

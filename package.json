@@ -10,7 +10,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"bonobo-plugin-sdk": "github:raythurnvoid/bonobo-plugin-sdk#f065bfed0fabd2ecb9e2c24626b121899e2929bc",
+		"bonobo-plugin-sdk": "github:raythurnvoid/bonobo-plugin-sdk#0d8660b9d8ec405ae395171db387b542717f7dff",
 		"convex": "1.47.0",
 		"preact": "11.0.1",
 		"react": "19.3.1"
