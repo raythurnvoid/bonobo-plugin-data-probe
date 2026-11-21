@@ -8482,6 +8482,10 @@ var jobId = document.querySelector("#job-id");
 var jobCursor = document.querySelector("#job-cursor");
 var jobButtons = jobForm.querySelectorAll("button");
 var jobResult = document.querySelector("#job-result");
+var outboundForm = document.querySelector("#outbound-form");
+var outboundUrl = document.querySelector("#outbound-url");
+var outboundButton = document.querySelector("#run-outbound");
+var outboundResult = document.querySelector("#outbound-result");
 var encoder = new TextEncoder();
 function is_record2(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -8501,7 +8505,7 @@ async function connect() {
 	const client = await bonobo_connect();
 	runButton.disabled = false;
 	refreshButton.disabled = false;
-	for (const button of [...restoreButtons, ...jobButtons])
+	for (const button of [...restoreButtons, ...jobButtons, outboundButton])
 		button.disabled = false;
 	status.textContent = "Ready.";
 	form.addEventListener("submit", async (event) => {
@@ -8769,6 +8773,36 @@ async function connect() {
 		} finally {
 			for (const button of jobButtons) button.disabled = false;
 			jobForm.removeAttribute("aria-busy");
+		}
+	});
+	outboundForm.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		outboundButton.disabled = true;
+		outboundForm.setAttribute("aria-busy", "true");
+		outboundResult.dataset.state = "running";
+		outboundResult.textContent = "Fetching\u2026";
+		try {
+			const reply = await invoke_backend({
+				case: "outbound-fetch",
+				url: outboundUrl.value.trim(),
+			});
+			outboundResult.textContent = JSON.stringify(
+				{ case: "outbound-fetch", ...reply },
+				null,
+				2,
+			);
+			outboundResult.dataset.state =
+				typeof reply.output?.status === "number" ? "done" : "refused";
+		} catch {
+			outboundResult.dataset.state = "no-reply";
+			outboundResult.textContent = JSON.stringify(
+				{ case: "outbound-fetch", status: "No response" },
+				null,
+				2,
+			);
+		} finally {
+			outboundButton.disabled = false;
+			outboundForm.removeAttribute("aria-busy");
 		}
 	});
 }

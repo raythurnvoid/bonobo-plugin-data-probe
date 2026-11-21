@@ -588,6 +588,42 @@ export default {
 					job_summary,
 				);
 			}
+			case "outbound-fetch": {
+				const { url } = event.invoke.input;
+				if (
+					!Object.keys(event.invoke.input).every((key) =>
+						["case", "url"].includes(key),
+					) ||
+					typeof url !== "string" ||
+					url.length > 2048 ||
+					!URL.canParse(url)
+				)
+					return Response.json(
+						{ message: "Expected one URL" },
+						{ status: 400 },
+					);
+				// This request leaves the host, so send no host token. The runner checks the origin
+				// against the manifest's outboundOrigins and throws when it is not allowed. Return
+				// that message as it is, so QA can see which check refused the URL.
+				try {
+					const response = await fetch(url, {
+						redirect: "manual",
+						signal: AbortSignal.timeout(5_000),
+					});
+					await response.body?.cancel();
+					return Response.json({ status: response.status });
+				} catch (error) {
+					return Response.json(
+						{
+							error:
+								error instanceof Error
+									? error.message.slice(0, 300)
+									: "Outbound fetch failed",
+						},
+						{ status: 502 },
+					);
+				}
+			}
 			default:
 				return Response.json(
 					{ message: "Unknown probe case" },

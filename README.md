@@ -1,6 +1,6 @@
 # Data Probe
 
-This normal plugin checks backend responses and the plugin document store. It uses the current frontend SDK. It needs `plugin.backend.invoke`, `plugin.data.read`, and `plugin.data.write`. It has no secrets and no outside network origins.
+This normal plugin checks backend responses and the plugin document store. It uses the current frontend SDK. It needs `plugin.backend.invoke`, `plugin.data.read`, and `plugin.data.write`. It has no secrets. Since 0.6.0 its backend may call one outside origin pattern, for the outbound fetch check below.
 
 The page runs one selected case through endpoint `probe` (`/probe`). It displays only a small summary: outer status, run ID, plugin status, output byte count, SHA-256, complete encoded reply byte count, and a short parsed message. It does not print a large response or token and does not retry a case.
 
@@ -100,6 +100,20 @@ The **Job status** form reads a job with **Job status (page)**, through the page
 
 For automation, `#restore-result` and `#job-result` have `data-state` (`idle`, `running`, `done`, `refused`, `no-reply`). `#job-result` also has `data-job-status` with the job's status. Each job in `#restore-jobs` is an item with `data-job-id`. The first job ID fills the Job ID field.
 
+## Outbound fetch check
+
+Since 0.6.0 the plugin declares `outbound.fetch` and `outboundOrigins: ["https://*.ray-thurne-void.workers.dev"]`. The entry is a wildcard origin: it allows every subdomain of `ray-thurne-void.workers.dev`, at any depth, but not `ray-thurne-void.workers.dev` itself. The public MCP fixture host `bonobo-senate-mcp-fixture.ray-thurne-void.workers.dev` is under it. A host that does not accept wildcard origins yet refuses this manifest at publish.
+
+Backend case `outbound-fetch` takes `{ url }` (any other key is 400). The backend calls `fetch(url)` once, with GET, manual redirects, a 5-second timeout, and no host token. The runner checks the origin. The case returns `{ status }` with the reply status, or 502 with `{ error }`, which holds the thrown message, cut to 300 characters. It never returns the reply body.
+
+The page has an **Outbound fetch** form. The URL field starts with the fixture URL. `#outbound-result` has `data-state` (`idle`, `running`, `done`, `refused`, `no-reply`). `done` means the runner allowed the origin and the URL answered, with any status.
+
+| URL                                                                          | Expected output                                   |
+| ---------------------------------------------------------------------------- | ------------------------------------------------- |
+| `https://bonobo-senate-mcp-fixture.ray-thurne-void.workers.dev/modern-basic` | `{ status }` with a number                        |
+| `https://ray-thurne-void.workers.dev/` (the base host itself)                | `{ error: "Plugin fetch origin is not allowed" }` |
+| `https://example.org/`                                                       | `{ error: "Plugin fetch origin is not allowed" }` |
+
 ## Build and review
 
 `src/backend.ts` and `src/frontend.ts` are bundled to the listed `dist/` files. The frontend includes the SDK and readable Preact source, matching the first-party plugins. Generated files are committed for normal GitHub publishing. The manifest script checks file sizes and source-line length and updates hashes.
@@ -115,6 +129,6 @@ vp env exec pnpm run build
 git diff --check
 ```
 
-The two builds must have identical file hashes. Direct tests verify status, complete envelope size, byte chunks, stream failures, host writes, scheduled permission checks, held revocation, and the Restore input checks and summaries. They do not prove live consent, deployed runner/Convex behavior, or browser accessibility. Break each permission check on purpose, observe its named test fail, restore exact source bytes, and pass again before review.
+The two builds must have identical file hashes. Direct tests verify status, complete envelope size, byte chunks, stream failures, host writes, scheduled permission checks, held revocation, the Restore input checks and summaries, and the outbound fetch case. They do not prove live consent, deployed runner/Convex behavior, or browser accessibility. Break each permission check on purpose, observe its named test fail, restore exact source bytes, and pass again before review.
 
-Version 0.5.0 adds the Restore checks. Version 0.5.1 changes only the version number, so QA can upgrade between two Restore versions. Version 0.5.2 shows the host `errorCode` of a failed backend call, because the host renamed `code` to `errorCode`. It uses SDK 0.25.5 at mirror commit `f065bfed0fabd2ecb9e2c24626b121899e2929bc`. Deploy the matching host API first. Confirm that the new version is unused, then review and publish the exact commit through the normal plugin flow. Update the intended installation with its existing service account, then verify the served version and artifact bytes. No permission, store, or review bypass is part of this fixture.
+Version 0.5.0 adds the Restore checks. Version 0.5.1 changes only the version number, so QA can upgrade between two Restore versions. Version 0.5.2 shows the host `errorCode` of a failed backend call, because the host renamed `code` to `errorCode`. It uses SDK 0.25.5 at mirror commit `f065bfed0fabd2ecb9e2c24626b121899e2929bc`. Deploy the matching host API first. Confirm that the new version is unused, then review and publish the exact commit through the normal plugin flow. Update the intended installation with its existing service account, then verify the served version and artifact bytes. Version 0.6.0 adds the outbound fetch check. It needs a host and a runner that accept wildcard origins. No permission, store, or review bypass is part of this fixture.

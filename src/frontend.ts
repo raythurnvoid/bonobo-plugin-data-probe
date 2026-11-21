@@ -38,6 +38,12 @@ const jobId = document.querySelector<HTMLInputElement>("#job-id")!;
 const jobCursor = document.querySelector<HTMLInputElement>("#job-cursor")!;
 const jobButtons = jobForm.querySelectorAll<HTMLButtonElement>("button");
 const jobResult = document.querySelector<HTMLPreElement>("#job-result")!;
+const outboundForm = document.querySelector<HTMLFormElement>("#outbound-form")!;
+const outboundUrl = document.querySelector<HTMLInputElement>("#outbound-url")!;
+const outboundButton =
+	document.querySelector<HTMLButtonElement>("#run-outbound")!;
+const outboundResult =
+	document.querySelector<HTMLPreElement>("#outbound-result")!;
 const encoder = new TextEncoder();
 
 function is_record(value: unknown): value is Record<string, unknown> {
@@ -60,7 +66,7 @@ async function connect() {
 	const client = await bonobo_connect();
 	runButton.disabled = false;
 	refreshButton.disabled = false;
-	for (const button of [...restoreButtons, ...jobButtons])
+	for (const button of [...restoreButtons, ...jobButtons, outboundButton])
 		button.disabled = false;
 	status.textContent = "Ready.";
 	form.addEventListener("submit", async (event) => {
@@ -338,6 +344,38 @@ async function connect() {
 		} finally {
 			for (const button of jobButtons) button.disabled = false;
 			jobForm.removeAttribute("aria-busy");
+		}
+	});
+
+	outboundForm.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		outboundButton.disabled = true;
+		outboundForm.setAttribute("aria-busy", "true");
+		outboundResult.dataset.state = "running";
+		outboundResult.textContent = "Fetching…";
+		try {
+			const reply = await invoke_backend({
+				case: "outbound-fetch",
+				url: outboundUrl.value.trim(),
+			});
+			outboundResult.textContent = JSON.stringify(
+				{ case: "outbound-fetch", ...reply },
+				null,
+				2,
+			);
+			// "done" means the runner allowed the origin and the URL answered, with any status.
+			outboundResult.dataset.state =
+				typeof reply.output?.status === "number" ? "done" : "refused";
+		} catch {
+			outboundResult.dataset.state = "no-reply";
+			outboundResult.textContent = JSON.stringify(
+				{ case: "outbound-fetch", status: "No response" },
+				null,
+				2,
+			);
+		} finally {
+			outboundButton.disabled = false;
+			outboundForm.removeAttribute("aria-busy");
 		}
 	});
 }

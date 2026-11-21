@@ -107,6 +107,22 @@
 				</button>
 			</form>
 			<pre id="job-result" data-state="idle">No job read yet.</pre>
+			<h2>Outbound fetch</h2>
+			<form id="outbound-form">
+				<p id="outbound-help">
+					The backend fetches this URL once with GET and shows the status, or
+					the error when the runner refuses the origin. It sends no token.
+				</p>
+				<label for="outbound-url">URL</label>
+				<input
+					id="outbound-url"
+					autocomplete="off"
+					aria-describedby="outbound-help"
+					value="https://bonobo-senate-mcp-fixture.ray-thurne-void.workers.dev/modern-basic"
+				/>
+				<button id="run-outbound" type="submit" disabled>Fetch</button>
+			</form>
+			<pre id="outbound-result" data-state="idle">No fetch yet.</pre>
 		</main>
 		<script type="module" src="./app.js"></script>
 	</body>

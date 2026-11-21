@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"name": "data-probe",
 	"displayName": "Data Probe",
-	"version": "0.5.2",
-	"description": "Checks backend replies, saved plugin documents, Trash restore, scheduled permission limits, and revocation. Also a QA fixture for the chat agent: one MCP server with an echo tool and one skill. No secrets.",
+	"version": "0.6.0",
+	"description": "Checks backend replies, saved plugin documents, Trash restore, scheduled permission limits, revocation, and the backend outbound origin check. Also a QA fixture for the chat agent: one MCP server with an echo tool and one skill. No secrets.",
 	"compatibility": {
 		"bonoboPluginRuntime": "1"
 	},
@@ -56,10 +56,11 @@
 		"workspace.files.restore",
 		"plugin.schedule.run",
 		"plugin.backend.invoke",
+		"outbound.fetch",
 		"agent.mcp.connect",
 		"agent.skills.contribute"
 	],
-	"outboundOrigins": [],
+	"outboundOrigins": ["https://*.ray-thurne-void.workers.dev"],
 	"mcpServers": [
 		{
 			"id": "fixture",
@@ -74,20 +75,20 @@
 	"files": [
 		{
 			"path": "dist/backend/worker.js",
-			"sha256": "sha256:c234bed729e1b2c2cdd10262c28bc3e39e3db4646ae6ded7c2e86c3587b2b416",
-			"bytes": 18255,
+			"sha256": "sha256:eca2da486d4c663f654d3bd96a837fbd98f3ae66b1ec4b7d516c88ec4c246f44",
+			"bytes": 19063,
 			"contentType": "application/javascript"
 		},
 		{
 			"path": "dist/frontend/index.html",
-			"sha256": "sha256:dba72c3e87a318f9c6b1ba61bb65a223fd821cb020f48faa71a509c3c95a075b",
-			"bytes": 4407,
+			"sha256": "sha256:23dd5d7a4ca321c90aec1b490866a9f4c3b765a7928afd492f2efc09f452a3af",
+			"bytes": 5021,
 			"contentType": "text/html"
 		},
 		{
 			"path": "dist/frontend/app.js",
-			"sha256": "sha256:cf129d96ae685cc27a375e5fc1e0d2757eb8a4e74c907b44d0eb5b4531560983",
-			"bytes": 248814,
+			"sha256": "sha256:6b57203bb7ff177bfd5bf75079759654900a4c7ddee7cc5e355fe5d6d9edbfc1",
+			"bytes": 249961,
 			"contentType": "application/javascript"
 		},
 		{

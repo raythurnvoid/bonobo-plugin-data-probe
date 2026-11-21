@@ -757,6 +757,59 @@ describe("restore probes", () => {
 	});
 });
 
+describe("outbound probe", () => {
+	const url = "https://a.ray-thurne-void.workers.dev/check";
+	for (const input of [
+		{},
+		{ url: 5 },
+		{ url: "not a url" },
+		{ url: `https://a.example/${"x".repeat(2048)}` },
+		{ url, token: "x" },
+	]) {
+		test(`refuses input ${JSON.stringify(input).slice(0, 80)}`, async (context) => {
+			const fetch = context.mock.method(globalThis, "fetch", async () =>
+				Response.json({}),
+			);
+			assert.equal(
+				(await invoke("outbound-fetch", "run_123", input)).status,
+				400,
+			);
+			assert.equal(fetch.mock.callCount(), 0);
+		});
+	}
+	test("fetches once without the host token and returns the status", async (context) => {
+		const requests: Request[] = [];
+		context.mock.method(
+			globalThis,
+			"fetch",
+			async (target: string | URL | Request, init?: RequestInit) => {
+				requests.push(new Request(target, init));
+				return new Response("hidden body", { status: 418 });
+			},
+		);
+		const response = await invoke("outbound-fetch", "run_123", { url });
+		assert.equal(response.status, 200);
+		assert.deepEqual(await response.json(), { status: 418 });
+		assert.equal(requests.length, 1);
+		assert.equal(requests[0]!.url, url);
+		assert.equal(requests[0]!.method, "GET");
+		assert.equal(requests[0]!.redirect, "manual");
+		assert.equal(requests[0]!.headers.get("Authorization"), null);
+	});
+	test("returns the message the runner throws", async (context) => {
+		context.mock.method(globalThis, "fetch", async () => {
+			throw new Error("Plugin fetch origin is not allowed");
+		});
+		const response = await invoke("outbound-fetch", "run_123", {
+			url: "https://example.org/",
+		});
+		assert.equal(response.status, 502);
+		assert.deepEqual(await response.json(), {
+			error: "Plugin fetch origin is not allowed",
+		});
+	});
+});
+
 describe("saved probe documents", () => {
 	for (const caseName of [
 		"write-500",
